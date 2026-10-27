@@ -1,0 +1,19 @@
+info:
+  name: Назначить специалиста
+  type: http
+  seq: 10
+
+http:
+  method: POST
+  url: "{{base_url}}/tickets/13/assign"
+  body:
+    type: json
+    data: '{"assignee_id":2}'
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

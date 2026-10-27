@@ -18,6 +18,7 @@ public function toArray(Request $request): array
         'id' => $this->id,
         'name' => $this->name,
         'description' => $this->description,
+        'tickets_count' => $this->whenCounted('tickets'),
     ];
 }
 }

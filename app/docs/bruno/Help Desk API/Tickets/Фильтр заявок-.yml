@@ -1,0 +1,23 @@
+info:
+  name: "Фильтр заявок\t"
+  type: http
+  seq: 2
+
+http:
+  method: GET
+  url: "{{base_url}}/tickets?status=new&priority=high"
+  params:
+    - name: status
+      value: new
+      type: query
+    - name: priority
+      value: high
+      type: query
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

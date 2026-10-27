@@ -1,0 +1,23 @@
+info:
+  name: Создать категорию
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{base_url}}/categories"
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Новая категория для удаления",
+        "description": "Тест удаления"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

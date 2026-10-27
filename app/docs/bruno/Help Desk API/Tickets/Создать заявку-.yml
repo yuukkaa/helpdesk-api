@@ -1,0 +1,19 @@
+info:
+  name: "Создать заявку\t"
+  type: http
+  seq: 5
+
+http:
+  method: POST
+  url: "{{base_url}}/tickets"
+  body:
+    type: json
+    data: '{"user_id":4,"category_id":1,"subject":"Не работает почта","description":"Не приходят письма с вложениями","priority":"high","tags":[1,2]}  '
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false
