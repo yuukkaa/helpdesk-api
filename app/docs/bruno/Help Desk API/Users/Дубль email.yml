@@ -1,0 +1,19 @@
+info:
+  name: Дубль email
+  type: http
+  seq: 4
+
+http:
+  method: POST
+  url: "{{base_url}}/users"
+  body:
+    type: json
+    data: '{"name":"Тест Тестов","email":"test@helpdesk.test","password":"password123","password_confirmation":"password123","role":"support"}'
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

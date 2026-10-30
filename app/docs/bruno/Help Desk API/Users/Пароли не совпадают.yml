@@ -1,0 +1,19 @@
+info:
+  name: Пароли не совпадают
+  type: http
+  seq: 5
+
+http:
+  method: POST
+  url: "{{base_url}}/users"
+  body:
+    type: json
+    data: '{"name":"Иван","email":"ivan@helpdesk.test","password":"password123","password_confirmation":"other"}'
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

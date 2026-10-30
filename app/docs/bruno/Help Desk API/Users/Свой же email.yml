@@ -1,0 +1,19 @@
+info:
+  name: Свой же email
+  type: http
+  seq: 8
+
+http:
+  method: PATCH
+  url: "{{base_url}}/users/10"
+  body:
+    type: json
+    data: '{"email":"test@helpdesk.test"}'
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

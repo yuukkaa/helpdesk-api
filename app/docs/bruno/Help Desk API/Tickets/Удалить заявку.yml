@@ -5,7 +5,7 @@ info:
 
 http:
   method: DELETE
-  url: "{{base_url}}/tickets/13"
+  url: "{{base_url}}/tickets/15"
   body:
     type: json
     data: ""

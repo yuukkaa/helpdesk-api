@@ -1,0 +1,19 @@
+info:
+  name: "Статья, пустое тело\t"
+  type: http
+  seq: 7
+
+http:
+  method: POST
+  url: "{{base_url}}/knowledge-base-articles"
+  body:
+    type: json
+    data: "{}"
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

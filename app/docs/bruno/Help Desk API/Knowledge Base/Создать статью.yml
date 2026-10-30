@@ -1,0 +1,19 @@
+info:
+  name: Создать статью
+  type: http
+  seq: 6
+
+http:
+  method: POST
+  url: "{{base_url}}/knowledge-base-articles"
+  body:
+    type: json
+    data: '{"user_id":2,"category_id":1,"title":"Как включить двухфакторную защиту","content":"Откройте настройки профиля и включите двухфакторную защиту.","is_published":true}'
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

@@ -1,0 +1,19 @@
+info:
+  name: Метка не найдена
+  type: http
+  seq: 6
+
+http:
+  method: DELETE
+  url: "{{base_url}}/tags/9999"
+  body:
+    type: json
+    data: "{}"
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

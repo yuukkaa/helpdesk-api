@@ -1,0 +1,19 @@
+info:
+  name: Снять метку
+  type: http
+  seq: 18
+
+http:
+  method: DELETE
+  url: "{{base_url}}/tickets/10/tags/1"
+  body:
+    type: json
+    data: ""
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

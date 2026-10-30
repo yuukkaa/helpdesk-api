@@ -1,0 +1,16 @@
+info:
+  name: Неподдерживаемый метод
+  type: http
+  seq: 3
+
+http:
+  method: PUT
+  url: "{{base_url}}/tickets"
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

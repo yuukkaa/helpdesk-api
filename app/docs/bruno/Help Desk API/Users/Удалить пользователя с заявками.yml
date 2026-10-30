@@ -1,0 +1,19 @@
+info:
+  name: Удалить пользователя с заявками
+  type: http
+  seq: 9
+
+http:
+  method: DELETE
+  url: "{{base_url}}/users/4"
+  body:
+    type: json
+    data: ""
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

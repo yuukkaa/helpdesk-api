@@ -11,6 +11,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
+use App\Models\Tag;
 
 class TicketService
 {
@@ -155,5 +156,37 @@ class TicketService
                 'size' => $size,
             ]);
         }
+    }
+
+        /** Добавляет метки, не трогая уже назначенные (attach). */
+    public function attachTags(Ticket $ticket, array $tagIds): Ticket
+    {
+        $new = array_diff($tagIds, $ticket->tags()->pluck('tags.id')->all());
+
+        if ($new) {
+            $ticket->tags()->attach($new);
+        }
+
+        return $this->loadFull($ticket);
+    }
+
+    /** Снимает одну метку (detach). */
+    public function detachTag(Ticket $ticket, Tag $tag): Ticket
+    {
+        if (! $ticket->tags()->whereKey($tag->id)->exists()) {
+            throw new ConflictHttpException('У заявки нет такой метки.');
+        }
+
+        $ticket->tags()->detach($tag->id);
+
+        return $this->loadFull($ticket);
+    }
+
+    /** Заменяет весь набор меток (sync). */
+    public function syncTags(Ticket $ticket, array $tagIds): Ticket
+    {
+        $ticket->tags()->sync($tagIds);
+
+        return $this->loadFull($ticket);
     }
 }

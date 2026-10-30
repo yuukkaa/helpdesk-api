@@ -1,0 +1,19 @@
+info:
+  name: Служебная заметка от клиента
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: "{{base_url}}/tickets/10/messages"
+  body:
+    type: json
+    data: '{"user_id":4,"body":"Заметка","is_internal":true}'
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

@@ -15,6 +15,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
+use App\Http\Requests\AttachTicketTagsRequest;
+use App\Http\Requests\SyncTicketTagsRequest;
+use App\Models\Tag;
 
 class TicketController extends Controller
 {
@@ -69,5 +72,24 @@ class TicketController extends Controller
         $status = TicketStatus::from($request->validated('status'));
 
         return new TicketResource($this->tickets->changeStatus($ticket, $status));
+    }
+
+        public function attachTags(AttachTicketTagsRequest $request, Ticket $ticket): TicketResource
+    {
+        return new TicketResource(
+            $this->tickets->attachTags($ticket, $request->validated('tag_ids'))
+        );
+    }
+
+    public function detachTag(Ticket $ticket, Tag $tag): TicketResource
+    {
+        return new TicketResource($this->tickets->detachTag($ticket, $tag));
+    }
+
+    public function syncTags(SyncTicketTagsRequest $request, Ticket $ticket): TicketResource
+    {
+        return new TicketResource(
+            $this->tickets->syncTags($ticket, $request->validated('tag_ids'))
+        );
     }
 }

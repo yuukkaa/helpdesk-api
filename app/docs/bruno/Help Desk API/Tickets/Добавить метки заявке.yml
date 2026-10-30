@@ -1,0 +1,19 @@
+info:
+  name: Добавить метки заявке
+  type: http
+  seq: 15
+
+http:
+  method: POST
+  url: "{{base_url}}/tickets/10/tags"
+  body:
+    type: json
+    data: '{"tag_ids":[3,4]}'
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false
