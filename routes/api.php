@@ -1,66 +1,47 @@
 <?php
 
+use App\Http\Controllers\Api\AiController;
 use App\Http\Controllers\Api\CategoryController;
-use App\Http\Controllers\Api\KnowledgeBaseArticleController;
+use App\Http\Controllers\Api\KnowledgeBaseController;
 use App\Http\Controllers\Api\MessageController;
 use App\Http\Controllers\Api\TagController;
 use App\Http\Controllers\Api\TicketController;
 use App\Http\Controllers\Api\UserController;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/user', function (Request $request) {
-    return $request->user();
-})->middleware('auth:sanctum');
+Route::prefix('v1')->group(function () {
+    // Пользователи и справочники
+    Route::get('/users', [UserController::class, 'index']);
+    Route::get('/categories', [CategoryController::class, 'index']);
+    Route::get('/tags', [TagController::class, 'index']);
 
-Route::get('/health', function () {
-    try {
-        DB::select('select 1');
-        $dbOk = true;
-    } catch (\Throwable $e) {
-        $dbOk = false;
-    }
+    // Заявки (Tickets)
+    Route::get('/tickets', [TicketController::class, 'index']);
+    Route::post('/tickets', [TicketController::class, 'store']);
+    Route::get('/tickets/{ticket}', [TicketController::class, 'show']);
+    Route::delete('/tickets/{ticket}', [TicketController::class, 'destroy']);
 
-    return response()->json([
-        'app' => config('app.name'),
-        'time' => now()->toIso8601String(),
-        'database' => $dbOk ? 'ok' : 'unavailable',
-    ], $dbOk ? 200 : 503);
+    // Управление заявкой
+    Route::post('/tickets/{ticket}/assign', [TicketController::class, 'assign']);
+    Route::patch('/tickets/{ticket}/status', [TicketController::class, 'changeStatus']);
+    Route::post('/tickets/{ticket}/tags', [TicketController::class, 'attachTag']);
+    Route::delete('/tickets/{ticket}/tags/{tag}', [TicketController::class, 'detachTag']);
+
+    // Переписка
+    Route::get('/tickets/{ticket}/messages', [MessageController::class, 'index']);
+    Route::post('/tickets/{ticket}/messages', [MessageController::class, 'store']);
+
+    // База знаний (все возможные пути фронтенда)
+    Route::get('/articles', [KnowledgeBaseController::class, 'index']);
+    Route::get('/articles/{article}', [KnowledgeBaseController::class, 'show']);
+    Route::get('/kb/articles', [KnowledgeBaseController::class, 'index']);
+    Route::get('/kb/articles/{article}', [KnowledgeBaseController::class, 'show']);
+    Route::get('/kb', [KnowledgeBaseController::class, 'index']);
+    Route::get('/kb/{article}', [KnowledgeBaseController::class, 'show']);
+    Route::get('/knowledge-base', [KnowledgeBaseController::class, 'index']);
+    Route::get('/knowledge-base/{article}', [KnowledgeBaseController::class, 'show']);
+
+    // ИИ маршруты
+    Route::post('/ai/suggest-ticket', [AiController::class, 'suggest']);
+    Route::post('/tickets/{ticket}/ai-draft', [AiController::class, 'draftReply']);
 });
-
-Route::middleware('throttle:60,1')->prefix('v1')->name('v1.')->group(function () {
-    // Сюда в ПР8 добавятся auth:sanctum и проверка ролей
-
-    Route::apiResource('categories', CategoryController::class);
-
-    Route::apiResource('tickets', TicketController::class);
-    Route::post('tickets/{ticket}/assign', [TicketController::class, 'assign'])
-        ->name('tickets.assign');
-    Route::patch('tickets/{ticket}/status', [TicketController::class, 'changeStatus'])
-        ->name('tickets.status');
-
-    // Метки заявки (связь «многие ко многим»)
-    Route::post('tickets/{ticket}/tags', [TicketController::class, 'attachTags'])
-        ->name('tickets.tags.attach');
-    Route::put('tickets/{ticket}/tags', [TicketController::class, 'syncTags'])
-        ->name('tickets.tags.sync');
-    Route::delete('tickets/{ticket}/tags/{tag}', [TicketController::class, 'detachTag'])
-        ->name('tickets.tags.detach');
-
-    // Переписка по заявке (вложенный ресурс)
-    Route::apiResource('tickets.messages', MessageController::class)
-        ->only(['index', 'store']);
-
-    Route::apiResource('tags', TagController::class)
-        ->only(['index', 'store', 'destroy']);
-
-    Route::apiResource('knowledge-base-articles', KnowledgeBaseArticleController::class)
-        ->parameters(['knowledge-base-articles' => 'article']);
-
-    Route::apiResource('users', UserController::class)
-        ->except(['show']);
-});
-
-// ВРЕМЕННЫЙ маршрут для проверки ошибки 500. Удалить после скриншота (шаг 11)
-Route::get('/debug/error', fn () => throw new \RuntimeException('Тестовая ошибка'));

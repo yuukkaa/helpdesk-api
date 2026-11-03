@@ -40,6 +40,7 @@ class TicketService
             ->when($filters['priority'] ?? null, fn ($q, $v) => $q->where('priority', $v))
             ->when($filters['category_id'] ?? null, fn ($q, $v) => $q->where('category_id', $v))
             ->when($filters['assignee_id'] ?? null, fn ($q, $v) => $q->where('assignee_id', $v))
+            ->when($filters['user_id'] ?? null, fn ($q, $v) => $q->where('user_id', $v))
             ->when($filters['search'] ?? null, function ($q, $v) {
                 $q->where(function ($q) use ($v) {
                     $q->where('subject', 'like', "%{$v}%")

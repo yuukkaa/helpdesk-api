@@ -1,0 +1,19 @@
+info:
+  name: ИИ определяет категорию и приоритет
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{base_url}}/ai/suggest-ticket"
+  body:
+    type: json
+    data: '{"subject":"Двойное списание за подписку","description":"За подписку деньги списали два раза, прикладываю выписку"}'
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

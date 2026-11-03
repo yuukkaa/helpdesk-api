@@ -28,7 +28,7 @@ class TicketController extends Controller
     public function index(Request $request): AnonymousResourceCollection
     {
         $filters = $request->only([
-            'status', 'priority', 'category_id', 'assignee_id', 'search', 'per_page',
+            'status', 'priority', 'category_id', 'assignee_id', 'search', 'per_page','user_id'
         ]);
 
         return TicketResource::collection($this->tickets->paginate($filters));
