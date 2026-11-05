@@ -1,0 +1,19 @@
+info:
+  name: ИИ-черновик ответа (RAG)
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{base_url}}/tickets/{id}/ai-draft"
+  body:
+    type: json
+    data: ""
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

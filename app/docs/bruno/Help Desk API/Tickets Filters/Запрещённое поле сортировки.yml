@@ -1,0 +1,23 @@
+info:
+  name: Запрещённое поле сортировки
+  type: http
+  seq: 14
+
+http:
+  method: GET
+  url: "{{base_url}}/tickets?sort=password"
+  params:
+    - name: sort
+      value: password
+      type: query
+  body:
+    type: json
+    data: ""
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

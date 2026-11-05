@@ -1,0 +1,19 @@
+info:
+  name: Сообщение в закрытую
+  type: http
+  seq: 10
+
+http:
+  method: POST
+  url: "{{base_url}}/tickets/8/messages"
+  body:
+    type: json
+    data: '{"body":"Ещё вопрос"}'
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

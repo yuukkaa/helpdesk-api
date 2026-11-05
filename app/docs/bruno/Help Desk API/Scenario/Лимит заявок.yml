@@ -1,0 +1,16 @@
+info:
+  name: Лимит заявок
+  type: http
+  seq: 11
+
+http:
+  method: POST
+  url: "{{base_url}}/tickets/12/assign"
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

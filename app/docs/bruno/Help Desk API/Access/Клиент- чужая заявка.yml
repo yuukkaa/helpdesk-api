@@ -1,0 +1,19 @@
+info:
+  name: "Клиент: чужая заявка"
+  type: http
+  seq: 13
+
+http:
+  method: GET
+  url: "{{base_url}}/tickets/3"
+  body:
+    type: json
+    data: ""
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

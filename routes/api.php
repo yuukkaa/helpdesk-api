@@ -1,24 +1,23 @@
 <?php
 
+use App\Http\Controllers\Api\AiController;
+use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\KnowledgeBaseArticleController;
 use App\Http\Controllers\Api\MessageController;
+use App\Http\Controllers\Api\StatisticsController;
 use App\Http\Controllers\Api\TagController;
 use App\Http\Controllers\Api\TicketController;
 use App\Http\Controllers\Api\UserController;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/user', function (Request $request) {
-    return $request->user();
-})->middleware('auth:sanctum');
-
+// Проверка работоспособности сервиса (Healthcheck)
 Route::get('/health', function () {
     try {
         DB::select('select 1');
         $dbOk = true;
-    } catch (\Throwable $e) {
+    } catch (\Throwable) {
         $dbOk = false;
     }
 
@@ -29,38 +28,99 @@ Route::get('/health', function () {
     ], $dbOk ? 200 : 503);
 });
 
-Route::middleware('throttle:60,1')->prefix('v1')->name('v1.')->group(function () {
-    // Сюда в ПР8 добавятся auth:sanctum и проверка ролей
+$registerApiRoutes = function (): void {
+    // 1. Публичные маршруты аутентификации
+    Route::post('/register', [AuthController::class, 'register']);
+    Route::post('/login', [AuthController::class, 'login']);
 
-    Route::apiResource('categories', CategoryController::class);
+    // 2. Защищённые маршруты (требуется Bearer-токен Sanctum)
+    Route::middleware('auth:sanctum')->group(function (): void {
+        // Профиль и выход
+        Route::post('/logout', [AuthController::class, 'logout']);
+        Route::get('/user', [AuthController::class, 'me']);
+        Route::get('/me', [AuthController::class, 'me']);
 
-    Route::apiResource('tickets', TicketController::class);
-    Route::post('tickets/{ticket}/assign', [TicketController::class, 'assign'])
-        ->name('tickets.assign');
-    Route::patch('tickets/{ticket}/status', [TicketController::class, 'changeStatus'])
-        ->name('tickets.status');
+        // Категории: просмотр всем авторизованным, изменение — только admin
+        Route::get('/categories', [CategoryController::class, 'index']);
+        Route::get('/categories/{category}', [CategoryController::class, 'show']);
+        Route::middleware('role:admin')->group(function (): void {
+            Route::post('/categories', [CategoryController::class, 'store']);
+            Route::put('/categories/{category}', [CategoryController::class, 'update']);
+            Route::patch('/categories/{category}', [CategoryController::class, 'update']);
+            Route::delete('/categories/{category}', [CategoryController::class, 'destroy']);
+        });
 
-    // Метки заявки (связь «многие ко многим»)
-    Route::post('tickets/{ticket}/tags', [TicketController::class, 'attachTags'])
-        ->name('tickets.tags.attach');
-    Route::put('tickets/{ticket}/tags', [TicketController::class, 'syncTags'])
-        ->name('tickets.tags.sync');
-    Route::delete('tickets/{ticket}/tags/{tag}', [TicketController::class, 'detachTag'])
-        ->name('tickets.tags.detach');
+        // База знаний: просмотр всем авторизованным (клиент видит только опубликованные), управление — support, admin
+        Route::get('/knowledge-base-articles', [KnowledgeBaseArticleController::class, 'index']);
+        Route::get('/knowledge-base-articles/{article}', [KnowledgeBaseArticleController::class, 'show']);
+        Route::get('/kb/articles', [KnowledgeBaseArticleController::class, 'index']);
+        Route::get('/kb/articles/{article}', [KnowledgeBaseArticleController::class, 'show']);
+        Route::get('/articles', [KnowledgeBaseArticleController::class, 'index']);
+        Route::get('/articles/{article}', [KnowledgeBaseArticleController::class, 'show']);
+        Route::get('/kb', [KnowledgeBaseArticleController::class, 'index']);
+        Route::get('/kb/{article}', [KnowledgeBaseArticleController::class, 'show']);
 
-    // Переписка по заявке (вложенный ресурс)
-    Route::apiResource('tickets.messages', MessageController::class)
-        ->only(['index', 'store']);
+        Route::middleware('role:support,admin')->group(function (): void {
+            Route::post('/knowledge-base-articles', [KnowledgeBaseArticleController::class, 'store']);
+            Route::put('/knowledge-base-articles/{article}', [KnowledgeBaseArticleController::class, 'update']);
+            Route::patch('/knowledge-base-articles/{article}', [KnowledgeBaseArticleController::class, 'update']);
+            Route::delete('/knowledge-base-articles/{article}', [KnowledgeBaseArticleController::class, 'destroy']);
+        });
 
-    Route::apiResource('tags', TagController::class)
-        ->only(['index', 'store', 'destroy']);
+        // Статистика и экспорт заявок в CSV (support, admin)
+        Route::middleware('role:support,admin')->group(function (): void {
+            Route::get('/statistics/tickets', [StatisticsController::class, 'tickets']);
+            Route::get('/tickets/stats', [TicketController::class, 'stats']);
+            Route::get('/stats', [TicketController::class, 'stats']);
+            Route::get('/tickets/export/csv', [TicketController::class, 'exportCsv']);
+        });
 
-    Route::apiResource('knowledge-base-articles', KnowledgeBaseArticleController::class)
-        ->parameters(['knowledge-base-articles' => 'article']);
+        // Заявки (Tickets)
+        Route::get('/tickets', [TicketController::class, 'index']);
+        Route::post('/tickets', [TicketController::class, 'store']);
+        Route::get('/tickets/{ticket}', [TicketController::class, 'show'])->whereNumber('ticket');
 
-    Route::apiResource('users', UserController::class)
-        ->except(['show']);
-});
+        // Переписка по заявке (Messages)
+        Route::get('/tickets/{ticket}/messages', [MessageController::class, 'index'])->whereNumber('ticket');
+        Route::post('/tickets/{ticket}/messages', [MessageController::class, 'store'])->whereNumber('ticket');
 
-// ВРЕМЕННЫЙ маршрут для проверки ошибки 500. Удалить после скриншота (шаг 11)
-Route::get('/debug/error', fn () => throw new \RuntimeException('Тестовая ошибка'));
+        // Действия специалистов поддержки и администратора
+        Route::middleware('role:support,admin')->group(function (): void {
+            Route::put('/tickets/{ticket}', [TicketController::class, 'update'])->whereNumber('ticket');
+            Route::patch('/tickets/{ticket}', [TicketController::class, 'update'])->whereNumber('ticket');
+            Route::post('/tickets/{ticket}/assign', [TicketController::class, 'assign'])->whereNumber('ticket');
+            Route::patch('/tickets/{ticket}/status', [TicketController::class, 'changeStatus'])->whereNumber('ticket');
+
+            // Управление метками заявки
+            Route::post('/tickets/{ticket}/tags', [TicketController::class, 'attachTag'])->whereNumber('ticket');
+            Route::put('/tickets/{ticket}/tags', [TicketController::class, 'syncTags'])->whereNumber('ticket');
+            Route::delete('/tickets/{ticket}/tags/{tag}', [TicketController::class, 'detachTag'])->whereNumber('ticket');
+
+            // Справочник меток
+            Route::get('/tags', [TagController::class, 'index']);
+            Route::post('/tags', [TagController::class, 'store']);
+            Route::delete('/tags/{tag}', [TagController::class, 'destroy']);
+
+            // ИИ-черновик ответа для специалиста
+            Route::post('/tickets/{ticket}/ai-draft', [AiController::class, 'draftReply'])
+                ->whereNumber('ticket')
+                ->withoutMiddleware(['throttle', 'throttle:api', 'throttle:ai']);
+        });
+
+        // Действия только для администратора (role:admin)
+        Route::middleware('role:admin')->group(function (): void {
+            Route::delete('/tickets/{ticket}', [TicketController::class, 'destroy'])->whereNumber('ticket');
+            Route::apiResource('users', UserController::class)->except(['show']);
+        });
+
+        // ИИ-классификация при создании заявки (доступна всем авторизованным)
+        Route::post('/ai/suggest-ticket', [AiController::class, 'suggest'])
+            ->withoutMiddleware(['throttle', 'throttle:api', 'throttle:ai']);
+    });
+};
+
+// Корневые маршруты /api/* (для клиентского приложения по заданию)
+$registerApiRoutes();
+
+// Версионированные маршруты /api/v1/* (для обратной совместимости и коллекции Postman/Bruno)
+Route::prefix('v1')->name('v1.')->group($registerApiRoutes);

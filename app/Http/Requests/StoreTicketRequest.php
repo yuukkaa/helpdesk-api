@@ -16,7 +16,6 @@ class StoreTicketRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'user_id' => ['required', 'integer', 'exists:users,id'],
             'subject' => ['required', 'string', 'max:255'],
             'description' => ['required', 'string'],
             'category_id' => ['required', 'integer', 'exists:categories,id'],
@@ -31,8 +30,6 @@ class StoreTicketRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'user_id.required' => 'Укажите автора обращения.',
-            'user_id.exists' => 'Указанный пользователь не существует.',
             'subject.required' => 'Укажите тему обращения.',
             'subject.max' => 'Тема не должна быть длиннее 255 символов.',
             'description.required' => 'Опишите проблему.',

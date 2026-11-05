@@ -18,6 +18,9 @@ request:
   headers:
     - name: Accept
       value: application/json
+  auth:
+    type: bearer
+    token: "{{token}}"
 bundled: false
 extensions:
   bruno:

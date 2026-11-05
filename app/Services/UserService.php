@@ -3,9 +3,10 @@
 namespace App\Services;
 
 use App\Enums\UserRole;
+use App\Exceptions\BusinessException;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
-use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
+use Illuminate\Support\Facades\Log;
 
 class UserService
 {
@@ -30,7 +31,15 @@ class UserService
         $data['role'] = $data['role'] ?? UserRole::Client->value;
 
         // Пароль хешируется автоматически благодаря cast 'hashed' в модели
-        return User::create($data);
+        $user = User::create($data);
+
+        Log::info('Создан пользователь администратором', [
+            'created_user_id' => $user->id,
+            'email' => $user->email,
+            'role' => $user->role->value ?? $user->role,
+        ]);
+
+        return $user;
     }
 
     public function update(User $user, array $data): User
@@ -41,6 +50,11 @@ class UserService
 
         $user->update($data);
 
+        Log::info('Обновлён пользователь', [
+            'updated_user_id' => $user->id,
+            'role' => $user->role->value ?? $user->role,
+        ]);
+
         return $user;
     }
 
@@ -49,11 +63,15 @@ class UserService
         if ($user->tickets()->exists()
             || $user->messages()->exists()
             || $user->knowledgeBaseArticles()->exists()) {
-            throw new ConflictHttpException(
-                'Нельзя удалить пользователя: с ним связаны заявки, сообщения или статьи.'
+            throw new BusinessException(
+                'Нельзя удалить пользователя: с ним связаны заявки, сообщения или статьи.',
+                409
             );
         }
 
+        $id = $user->id;
         $user->delete();
+
+        Log::info('Удалён пользователь', ['deleted_user_id' => $id]);
     }
 }

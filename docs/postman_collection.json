@@ -1,0 +1,279 @@
+{
+  "info": {
+    "name": "Help Desk API — Веб-сервис технической поддержки",
+    "_postman_id": "9f8e7d6c-5b4a-4321-8765-123456789abc",
+    "description": "Полная коллекция запросов REST API веб-сервиса технической поддержки (Help Desk) на базе Laravel и Sanctum.\n\nРоли пользователей:\n- `client` — создание своих заявок, переписка, просмотр опубликованных статей базы знаний;\n- `support` — работа со всеми заявками, взятие в работу, смена статусов, служебные заметки, теги, управление базой знаний, просмотр статистики, экспорт в CSV;\n- `admin` — полный доступ, включая управление категориями, пользователями, назначение любых специалистов и удаление заявок.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000/api",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "1. Аутентификация (Auth)",
+      "item": [
+        {
+          "name": "Регистрация клиента (POST /api/register)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Иван Петров\",\n  \"email\": \"ivan@client.local\",\n  \"password\": \"password123\",\n  \"password_confirmation\": \"password123\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/register", "host": ["{{base_url}}"], "path": ["register"] },
+            "description": "Создаёт нового пользователя с ролью `client` и возвращает Bearer-токен.\nКоды ответов: 201 Created, 422 Unprocessable Entity.\nТребуемая роль: гость (публичный маршрут)."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"data\": {\n    \"id\": 6,\n    \"name\": \"Иван Петров\",\n    \"email\": \"ivan@client.local\",\n    \"role\": \"client\",\n    \"created_at\": \"2026-11-05T15:00:00.000000Z\"\n  },\n  \"token\": \"1|sanctum_token_example\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Вход в систему (POST /api/login)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@helpdesk.local\",\n  \"password\": \"password\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/login", "host": ["{{base_url}}"], "path": ["login"] },
+            "description": "Аутентификация пользователя по email и паролю, выдача токена Sanctum.\nКоды ответов: 200 OK, 401 Unauthorized, 422 Unprocessable Entity.\nТребуемая роль: гость."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"data\": {\n    \"id\": 1,\n    \"name\": \"Администратор Системы\",\n    \"email\": \"admin@helpdesk.local\",\n    \"role\": \"admin\",\n    \"created_at\": \"2026-11-05T12:00:00.000000Z\"\n  },\n  \"token\": \"2|sanctum_token_example\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Текущий пользователь (GET /api/user)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/user", "host": ["{{base_url}}"], "path": ["user"] },
+            "description": "Возвращает профиль текущего авторизованного пользователя.\nКоды ответов: 200 OK, 401 Unauthorized.\nТребуемая роль: client, support, admin."
+          }
+        },
+        {
+          "name": "Выход из системы (POST /api/logout)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/logout", "host": ["{{base_url}}"], "path": ["logout"] },
+            "description": "Удаляет текущий Bearer-токен пользователя.\nКоды ответов: 204 No Content, 401 Unauthorized.\nТребуемая роль: client, support, admin."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Заявки (Tickets)",
+      "item": [
+        {
+          "name": "Список заявок с фильтрацией и пагинацией (GET /api/tickets)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/tickets?page=1&per_page=10&status=new&priority=high",
+              "host": ["{{base_url}}"],
+              "path": ["tickets"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "per_page", "value": "10" },
+                { "key": "status", "value": "new" },
+                { "key": "priority", "value": "high" }
+              ]
+            },
+            "description": "Возвращает пагинированный список заявок. Клиент видит только свои заявки, специалист и администратор — все.\nКоды ответов: 200 OK, 401 Unauthorized, 422 Unprocessable Entity.\nТребуемая роль: client, support, admin."
+          }
+        },
+        {
+          "name": "Создание заявки (POST /api/tickets)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"category_id\": 1,\n  \"subject\": \"Не могу войти в корпоративную почту\",\n  \"description\": \"После смены пароля система выдаёт ошибку авторизации IMAP.\",\n  \"priority\": \"high\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/tickets", "host": ["{{base_url}}"], "path": ["tickets"] },
+            "description": "Создаёт новое обращение со статусом `new`.\nКоды ответов: 201 Created, 401 Unauthorized, 422 Unprocessable Entity.\nТребуемая роль: client, support, admin."
+          }
+        },
+        {
+          "name": "Просмотр заявки (GET /api/tickets/{id})",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/tickets/1", "host": ["{{base_url}}"], "path": ["tickets", "1"] },
+            "description": "Возвращает детальную информацию о заявке, тегах и сообщениях.\nКоды ответов: 200 OK, 401 Unauthorized, 403 Forbidden (чужая заявка для клиента), 404 Not Found.\nТребуемая роль: автор заявки (client), support, admin."
+          }
+        },
+        {
+          "name": "Назначение ответственного (POST /api/tickets/{id}/assign)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assignee_id\": 2\n}"
+            },
+            "url": { "raw": "{{base_url}}/tickets/1/assign", "host": ["{{base_url}}"], "path": ["tickets", "1", "assign"] },
+            "description": "Назначает специалиста на заявку и переводит статус `new -> in_progress`. Максимум 5 активных заявок на одного специалиста.\nКоды ответов: 200 OK, 403 Forbidden, 404 Not Found, 409 Conflict.\nТребуемая роль: support, admin."
+          }
+        },
+        {
+          "name": "Смена статуса заявки (PATCH /api/tickets/{id}/status)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"resolved\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/tickets/1/status", "host": ["{{base_url}}"], "path": ["tickets", "1", "status"] },
+            "description": "Изменяет статус заявки по допустимому графу переходов.\nКоды ответов: 200 OK, 403 Forbidden, 409 Conflict, 422 Unprocessable Entity.\nТребуемая роль: ответственный support, admin."
+          }
+        },
+        {
+          "name": "Удаление заявки (DELETE /api/tickets/{id})",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/tickets/1", "host": ["{{base_url}}"], "path": ["tickets", "1"] },
+            "description": "Удаляет заявку вместе с вложениями и перепиской.\nКоды ответов: 204 No Content, 403 Forbidden, 404 Not Found.\nТребуемая роль: admin."
+          }
+        },
+        {
+          "name": "Экспорт заявок в CSV (GET /api/tickets/export/csv)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/tickets/export/csv", "host": ["{{base_url}}"], "path": ["tickets", "export", "csv"] },
+            "description": "Выгружает список заявок в CSV-файл.\nКоды ответов: 200 OK, 403 Forbidden.\nТребуемая роль: support, admin."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Сообщения (Messages)",
+      "item": [
+        {
+          "name": "Список сообщений заявки (GET /api/tickets/{id}/messages)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/tickets/1/messages", "host": ["{{base_url}}"], "path": ["tickets", "1", "messages"] },
+            "description": "Возвращает сообщения по заявке (служебные заметки скрыты от клиента).\nКоды ответов: 200 OK, 403 Forbidden, 404 Not Found.\nТребуемая роль: автор заявки (client), support, admin."
+          }
+        },
+        {
+          "name": "Отправка сообщения (POST /api/tickets/{id}/messages)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"body\": \"Проверил подключение, ошибка сохраняется.\",\n  \"is_internal\": false\n}"
+            },
+            "url": { "raw": "{{base_url}}/tickets/1/messages", "host": ["{{base_url}}"], "path": ["tickets", "1", "messages"] },
+            "description": "Добавляет сообщение в открытую заявку.\nКоды ответов: 201 Created, 403 Forbidden, 409 Conflict (заявка закрыта), 422 Unprocessable Entity.\nТребуемая роль: автор заявки (client), support, admin."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Категории, Теги, База знаний и Пользователи",
+      "item": [
+        {
+          "name": "Список категорий (GET /api/categories)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/categories", "host": ["{{base_url}}"], "path": ["categories"] },
+            "description": "Список категорий обращений.\nТребуемая роль: client, support, admin."
+          }
+        },
+        {
+          "name": "Создание категории (POST /api/categories)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Оборудование и периферия\",\n  \"description\": \"Настройка принтеров, сканеров и рабочих станций\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/categories", "host": ["{{base_url}}"], "path": ["categories"] },
+            "description": "Создаёт новую категорию.\nКоды ответов: 201 Created, 403 Forbidden, 422 Unprocessable Entity.\nТребуемая роль: admin."
+          }
+        },
+        {
+          "name": "Список статей базы знаний (GET /api/knowledge-base-articles)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/knowledge-base-articles", "host": ["{{base_url}}"], "path": ["knowledge-base-articles"] },
+            "description": "Список статей базы знаний.\nТребуемая роль: client, support, admin."
+          }
+        },
+        {
+          "name": "Список пользователей (GET /api/users)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/users", "host": ["{{base_url}}"], "path": ["users"] },
+            "description": "Пагинированный список всех пользователей.\nКоды ответов: 200 OK, 403 Forbidden.\nТребуемая роль: admin."
+          }
+        }
+      ]
+    }
+  ]
+}

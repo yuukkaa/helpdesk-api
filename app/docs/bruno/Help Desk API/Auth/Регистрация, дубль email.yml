@@ -1,0 +1,36 @@
+info:
+  name: Регистрация, дубль email
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{base_url}}/register"
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Новый Клиент",
+        "email": "new2@helpdesk.test",
+        "password": "password123",
+        "password_confirmation": "password123"
+      }
+  auth: inherit
+
+runtime:
+  actions:
+    - type: set-variable
+      phase: after-response
+      selector:
+        expression: res.body.token
+        method: jsonq
+      variable:
+        name: token
+        scope: runtime
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false
