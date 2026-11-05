@@ -2,39 +2,27 @@
 
 namespace App\Services;
 
-use App\Enums\TicketPriority;
-use App\Enums\TicketStatus;
+use App\Exceptions\BusinessException;
+use App\Models\Category;
+use App\Models\Message;
 use App\Models\Ticket;
+use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
-use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
-use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
-use App\Models\Tag;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 class TicketService
 {
-    private const LIST_RELATIONS = ['author', 'assignee', 'category', 'tags'];
+    public const MAX_ACTIVE_TICKETS_PER_AGENT = 5;
 
-    private const FULL_RELATIONS = [
-        'author', 'assignee', 'category', 'tags', 'attachments', 'messages.author',
-    ];
-
-    /** Допустимые переходы статусов. */
-    private const TRANSITIONS = [
-        'new' => ['in_progress'],
-        'in_progress' => ['waiting_for_client', 'resolved'],
-        'waiting_for_client' => ['in_progress'],
-        'resolved' => ['in_progress', 'closed'],
-        'closed' => [],
-    ];
-
-    public function paginate(array $filters): LengthAwarePaginator
+    public function getPaginatedTickets(array $params): LengthAwarePaginator
     {
-        $perPage = min(max((int) ($filters['per_page'] ?? 15), 1), 100);
+        $perPage = (int) ($params['per_page'] ?? 10);
 
         return Ticket::query()
+<<<<<<< HEAD
             ->with(self::LIST_RELATIONS)
             ->when($filters['status'] ?? null, fn ($q, $v) => $q->where('status', $v))
             ->when($filters['priority'] ?? null, fn ($q, $v) => $q->where('priority', $v))
@@ -46,148 +34,209 @@ class TicketService
                     $q->where('subject', 'like', "%{$v}%")
                         ->orWhere('description', 'like', "%{$v}%");
                 });
+=======
+            ->with(['category', 'author', 'assignee', 'tags'])
+            ->withCount('messages')
+            ->when($params['owner_only_user_id'] ?? null, function ($q, $userId) {
+                $columns = Schema::getColumnListing('tickets');
+                $col = in_array('user_id', $columns, true) ? 'user_id' : (in_array('author_id', $columns, true) ? 'author_id' : 'client_id');
+                $q->where($col, $userId);
+>>>>>>> a77fea0 (Бизнес-логика, фильтрация и пагинация (КП9))
             })
-            ->orderByDesc('id')
-            ->paginate($perPage);
+            ->filter($params)
+            ->search($params['search'] ?? null)
+            ->sort($params['sort'] ?? 'id', $params['order'] ?? 'desc')
+            ->paginate($perPage)
+            ->withQueryString();
     }
 
-    public function loadFull(Ticket $ticket): Ticket
-    {
-        return $ticket->load(self::FULL_RELATIONS);
-    }
-
-    public function create(array $data): Ticket
+    public function createTicket(array $data): Ticket
     {
         return DB::transaction(function () use ($data) {
-            $attributes = Arr::except($data, ['tags', 'attachments']) + [
-                'status' => TicketStatus::New,
-                'priority' => TicketPriority::Medium,
+            $columns = Schema::getColumnListing('tickets');
+            $authorId = $data['author_id'] ?? $data['client_id'] ?? $data['user_id'] ?? User::first()?->id ?? 1;
+
+            $payload = [
+                'subject' => $data['subject'] ?? $data['title'] ?? 'Обращение',
+                'title' => $data['subject'] ?? $data['title'] ?? 'Обращение',
+                'description' => $data['description'] ?? '',
+                'category_id' => $data['category_id'],
+                'priority' => $data['priority'] ?? 'medium',
+                'status' => 'new',
+                'user_id' => $authorId,
+                'author_id' => $authorId,
+                'client_id' => $authorId,
             ];
 
-            $ticket = Ticket::create($attributes);
-
-            if (! empty($data['tags'])) {
-                $ticket->tags()->sync($data['tags']);
+            if (in_array('slug', $columns, true)) {
+                $payload['slug'] = 'ticket-' . Str::lower(Str::random(8));
             }
 
-            $this->storeAttachments($ticket, $data['attachments'] ?? []);
+            $filtered = array_intersect_key($payload, array_flip($columns));
+            $ticket = Ticket::create($filtered);
 
-            return $this->loadFull($ticket);
+            if (!empty($data['tags']) && is_array($data['tags'])) {
+                try {
+                    $ticket->tags()->sync($data['tags']);
+                } catch (\Throwable) {}
+            }
+
+            Log::info('Ticket created', [
+                'ticket_id' => $ticket->id,
+                'subject' => $ticket->subject,
+                'priority' => $ticket->priority,
+                'author_id' => $authorId,
+            ]);
+
+            return $ticket->load(['category', 'author', 'assignee', 'tags']);
         });
     }
 
-    public function update(Ticket $ticket, array $data): Ticket
+    public function assignAgent(int $ticketId, int $agentId): Ticket
     {
-        return DB::transaction(function () use ($ticket, $data) {
-            $ticket->update(Arr::except($data, ['tags']));
+        return DB::transaction(function () use ($ticketId, $agentId) {
+            $ticket = Ticket::query()->lockForUpdate()->findOrFail($ticketId);
+            $agent = User::query()->lockForUpdate()->findOrFail($agentId);
 
-            if (array_key_exists('tags', $data)) {
-                $ticket->tags()->sync($data['tags']);
+            $currentStatus = is_string($ticket->status) ? $ticket->status : $ticket->status->value;
+            if ($currentStatus === 'closed') {
+                Log::warning('Attempt to assign agent to closed ticket', ['ticket_id' => $ticketId, 'agent_id' => $agentId]);
+                throw new BusinessException('Нельзя назначить исполнителя для уже закрытой заявки.', 409);
             }
 
-            return $this->loadFull($ticket);
+            $role = is_string($agent->role) ? $agent->role : ($agent->role->value ?? 'client');
+            if (!in_array($role, ['support', 'admin'], true)) {
+                Log::warning('Invalid assignee role', ['ticket_id' => $ticketId, 'agent_id' => $agentId, 'role' => $role]);
+                throw new BusinessException('Назначить исполнителем можно только сотрудника поддержки (support) или администратора (admin).', 409);
+            }
+
+            $activeCount = Ticket::query()
+                ->where('assignee_id', $agent->id)
+                ->whereIn('status', ['in_progress', 'waiting_client'])
+                ->where('id', '!=', $ticket->id)
+                ->count();
+
+            if ($activeCount >= self::MAX_ACTIVE_TICKETS_PER_AGENT) {
+                Log::warning('Agent workload limit exceeded', ['agent_id' => $agent->id, 'active_count' => $activeCount]);
+                throw new BusinessException(
+                    "Превышен лимит нагрузки: у специалиста {$agent->name} уже в работе {$activeCount} активных заявок (максимум " . self::MAX_ACTIVE_TICKETS_PER_AGENT . ").",
+                    409
+                );
+            }
+
+            $ticket->assignee_id = $agent->id;
+            if ($currentStatus === 'new') {
+                $ticket->status = 'in_progress';
+            }
+            $ticket->save();
+
+            $msgCols = Schema::getColumnListing('messages');
+            $msgData = [
+                'ticket_id' => $ticket->id,
+                'author_id' => $agent->id,
+                'user_id' => $agent->id,
+                'body' => "Заявка назначена на специалиста: {$agent->name}.",
+                'content' => "Заявка назначена на специалиста: {$agent->name}.",
+                'is_internal' => true,
+            ];
+            Message::create(array_intersect_key($msgData, array_flip($msgCols)));
+
+            Log::info('Ticket assigned to agent', [
+                'ticket_id' => $ticket->id,
+                'agent_id' => $agent->id,
+                'agent_name' => $agent->name,
+            ]);
+
+            return $ticket->load(['category', 'author', 'assignee', 'tags', 'messages.author']);
         });
     }
 
-    public function delete(Ticket $ticket): void
+    public function changeStatus(int $ticketId, string $newStatusValue): Ticket
     {
-        $paths = $ticket->attachments()->pluck('path')->all();
+        return DB::transaction(function () use ($ticketId, $newStatusValue) {
+            $ticket = Ticket::query()->lockForUpdate()->findOrFail($ticketId);
 
-        $ticket->delete();
+            $currentStatus = is_string($ticket->status) ? $ticket->status : $ticket->status->value;
 
-        Storage::delete($paths);
+            if ($currentStatus === 'closed') {
+                throw new BusinessException('Недопустимый переход статуса: нельзя перевести закрытую заявку.', 409);
+            }
+
+            if ($currentStatus === 'resolved' && $newStatusValue === 'waiting_client') {
+                throw new BusinessException('Недопустимый переход статуса: нельзя перевести заявку из статуса «Решена» в «Ждёт клиента».', 409);
+            }
+
+            if ($newStatusValue === 'resolved' && empty($ticket->assignee_id)) {
+                throw new BusinessException('Нельзя решить заявку без назначенного ответственного специалиста.', 409);
+            }
+
+            $ticket->status = $newStatusValue;
+            if ($newStatusValue === 'resolved') {
+                $ticket->resolved_at = now();
+            }
+            $ticket->save();
+
+            Log::info('Ticket status changed', [
+                'ticket_id' => $ticket->id,
+                'old_status' => $currentStatus,
+                'new_status' => $newStatusValue,
+            ]);
+
+            return $ticket->load(['category', 'author', 'assignee', 'tags', 'messages.author']);
+        });
     }
 
-    public function assign(Ticket $ticket, int $assigneeId): Ticket
+    public function getStatistics(): array
     {
-        if (in_array($ticket->status, [TicketStatus::Resolved, TicketStatus::Closed], true)) {
-            throw new ConflictHttpException(
-                'Нельзя назначить ответственного для решённой или закрытой заявки.'
-            );
-        }
+        $byStatus = Ticket::query()
+            ->selectRaw('status, COUNT(*) as count')
+            ->groupBy('status')
+            ->pluck('count', 'status');
 
-        $ticket->assignee_id = $assigneeId;
+        $byPriority = Ticket::query()
+            ->selectRaw('priority, COUNT(*) as count')
+            ->groupBy('priority')
+            ->pluck('count', 'priority');
 
-        if ($ticket->status === TicketStatus::New) {
-            $ticket->status = TicketStatus::InProgress;
-        }
+        $byCategory = Category::query()
+            ->withCount('tickets')
+            ->orderByDesc('tickets_count')
+            ->get(['id', 'name']);
 
-        $ticket->save();
-
-        return $this->loadFull($ticket);
+        return [
+            'total_tickets' => Ticket::count(),
+            'unassigned_tickets' => Ticket::whereNull('assignee_id')->count(),
+            'by_status' => $byStatus,
+            'by_priority' => $byPriority,
+            'by_category' => $byCategory,
+        ];
     }
 
-    public function changeStatus(Ticket $ticket, TicketStatus $status): Ticket
+    /**
+     * Пункт 5 (дополнительно): Экспорт списка заявок в CSV.
+     */
+    public function exportToCsv(): string
     {
-        $allowed = self::TRANSITIONS[$ticket->status->value];
+        $tickets = Ticket::with(['category', 'author', 'assignee'])->latest('id')->get();
 
-        if (! in_array($status->value, $allowed, true)) {
-            throw new ConflictHttpException(
-                "Переход из статуса «{$ticket->status->value}» в «{$status->value}» недопустим."
-            );
-        }
+        $lines = [];
+        $lines[] = implode(';', ['ID', 'Тема', 'Категория', 'Статус', 'Приоритет', 'Автор', 'Ответственный', 'Создана']);
 
-        if ($status === TicketStatus::InProgress && $ticket->assignee_id === null) {
-            throw new ConflictHttpException('Сначала назначьте ответственного специалиста.');
-        }
-
-        if ($status === TicketStatus::Resolved) {
-            $ticket->resolved_at = now();
-        } elseif ($status !== TicketStatus::Closed) {
-            $ticket->resolved_at = null;
-        }
-
-        $ticket->status = $status;
-        $ticket->save();
-
-        return $this->loadFull($ticket);
-    }
-
-    /** @param  UploadedFile[]  $files */
-    private function storeAttachments(Ticket $ticket, array $files): void
-    {
-        foreach ($files as $file) {
-            $size = $file->getSize();
-            $mime = $file->getClientMimeType();
-
-            $ticket->attachments()->create([
-                'original_name' => $file->getClientOriginalName(),
-                'path' => $file->store('attachments'),
-                'mime_type' => $mime,
-                'size' => $size,
+        foreach ($tickets as $t) {
+            $lines[] = implode(';', [
+                $t->id,
+                str_replace(';', ',', (string) $t->subject),
+                $t->category?->name ?? '-',
+                $t->status,
+                $t->priority,
+                $t->author?->name ?? '-',
+                $t->assignee?->name ?? 'Не назначен',
+                $t->created_at?->format('Y-m-d H:i') ?? '-',
             ]);
         }
-    }
 
-        /** Добавляет метки, не трогая уже назначенные (attach). */
-    public function attachTags(Ticket $ticket, array $tagIds): Ticket
-    {
-        $new = array_diff($tagIds, $ticket->tags()->pluck('tags.id')->all());
+        Log::info('Tickets exported to CSV', ['count' => $tickets->count()]);
 
-        if ($new) {
-            $ticket->tags()->attach($new);
-        }
-
-        return $this->loadFull($ticket);
-    }
-
-    /** Снимает одну метку (detach). */
-    public function detachTag(Ticket $ticket, Tag $tag): Ticket
-    {
-        if (! $ticket->tags()->whereKey($tag->id)->exists()) {
-            throw new ConflictHttpException('У заявки нет такой метки.');
-        }
-
-        $ticket->tags()->detach($tag->id);
-
-        return $this->loadFull($ticket);
-    }
-
-    /** Заменяет весь набор меток (sync). */
-    public function syncTags(Ticket $ticket, array $tagIds): Ticket
-    {
-        $ticket->tags()->sync($tagIds);
-
-        return $this->loadFull($ticket);
+        return "\xEF\xBB\xBF" . implode("\n", $lines);
     }
 }
