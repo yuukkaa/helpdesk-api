@@ -1,59 +1,92 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { api } from './api'
-import type { Paginated, User } from './types'
+import { api, clearToken, getToken, setToken } from './api'
+import type { User } from './types'
 
-interface UserContextValue {
-  users: User[]
-  current: User | null
-  setCurrentId: (id: number) => void
-  isStaff: boolean
+interface RegisterData {
+  name: string
+  email: string
+  password: string
+  password_confirmation: string
 }
 
-const fallbackUsers: User[] = [
-  { id: 1, name: 'Сотрудник поддержки', email: 'support@test.local', role: 'support' },
-  { id: 2, name: 'Клиент', email: 'client@test.local', role: 'client' },
-]
+interface AuthContextValue {
+  current: User | null
+  loading: boolean
+  isStaff: boolean
+  isAdmin: boolean
+  login: (email: string, password: string) => Promise<void>
+  register: (data: RegisterData) => Promise<void>
+  logout: () => Promise<void>
+}
 
-const UserContext = createContext<UserContextValue>({
-  users: fallbackUsers,
-  current: fallbackUsers[0],
-  setCurrentId: () => {},
-  isStaff: true,
+const AuthContext = createContext<AuthContextValue>({
+  current: null,
+  loading: true,
+  isStaff: false,
+  isAdmin: false,
+  login: async () => {},
+  register: async () => {},
+  logout: async () => {},
 })
 
 export function UserProvider({ children }: { children: ReactNode }) {
-  const [users, setUsers] = useState<User[]>(fallbackUsers)
-  const [currentId, setId] = useState<number | null>(() => {
-    const saved = localStorage.getItem('helpdesk_user_id')
-    return saved ? Number(saved) : 1
-  })
+  const [current, setCurrent] = useState<User | null>(null)
+  const [loading, setLoading] = useState(() => getToken() !== null)
 
+  // При открытии приложения получаем имя и роль текущего пользователя через /api/user
   useEffect(() => {
-    api<Paginated<User>>('/users', { query: { per_page: 100 } })
+    if (!getToken()) return
+    api<{ data: User } | User>('/user')
       .then((response) => {
-        if (response?.data && response.data.length > 0) {
-          setUsers(response.data)
-        }
+        const user = 'data' in response ? response.data : response
+        setCurrent(user)
       })
-      .catch(() => {
-        // Оставляем fallback-пользователей, если бэкенд недоступен
-      })
+      .catch(() => clearToken())
+      .finally(() => setLoading(false))
   }, [])
 
-  const current = users.find((user) => user.id === currentId) ?? users[0] ?? null
+  // При ответе 401 api.ts очищает токен и отправляет событие auth:expired
+  useEffect(() => {
+    const onExpired = () => setCurrent(null)
+    window.addEventListener('auth:expired', onExpired)
+    return () => window.removeEventListener('auth:expired', onExpired)
+  }, [])
 
-  const setCurrentId = (id: number) => {
-    localStorage.setItem('helpdesk_user_id', String(id))
-    setId(id)
+  async function login(email: string, password: string) {
+    const response = await api<{ data: User; token: string }>('/login', {
+      method: 'POST',
+      body: { email, password },
+    })
+    setToken(response.token)
+    setCurrent(response.data)
+  }
+
+  async function register(data: RegisterData) {
+    const response = await api<{ data: User; token: string }>('/register', {
+      method: 'POST',
+      body: data,
+    })
+    setToken(response.token)
+    setCurrent(response.data)
+  }
+
+  async function logout() {
+    try {
+      await api('/logout', { method: 'POST' })
+    } finally {
+      clearToken()
+      setCurrent(null)
+    }
   }
 
   const isStaff = current?.role === 'support' || current?.role === 'admin'
+  const isAdmin = current?.role === 'admin'
 
   return (
-    <UserContext.Provider value={{ users, current, setCurrentId, isStaff }}>
+    <AuthContext.Provider value={{ current, loading, isStaff, isAdmin, login, register, logout }}>
       {children}
-    </UserContext.Provider>
+    </AuthContext.Provider>
   )
 }
 
-export const useCurrentUser = () => useContext(UserContext)
+export const useCurrentUser = () => useContext(AuthContext)

@@ -20,7 +20,6 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { api, errorText } from '@/lib/api'
-import { useCurrentUser } from '@/lib/user-context'
 import { toast } from 'sonner'
 import type { Category } from '@/lib/types'
 
@@ -37,7 +36,6 @@ interface AiSuggestResponse {
 }
 
 export function TicketFormDialog({ open, onOpenChange, onCreated }: TicketFormDialogProps) {
-  const { current, users } = useCurrentUser()
   const [categories, setCategories] = useState<Category[]>([])
   const [subject, setSubject] = useState('')
   const [description, setDescription] = useState('')
@@ -107,21 +105,15 @@ export function TicketFormDialog({ open, onOpenChange, onCreated }: TicketFormDi
       return
     }
 
-    const authorId = current?.id || Number(localStorage.getItem('helpdesk_user_id')) || users[0]?.id || 1
-
     setLoading(true)
     try {
       await api('/tickets', {
         method: 'POST',
         body: {
-          subject,
-          title: subject,
-          description,
           category_id: selectedCat,
+          subject,
+          description,
           priority,
-          client_id: authorId,
-          user_id: authorId,
-          author_id: authorId,
         },
       })
       toast.success('Заявка успешно создана')

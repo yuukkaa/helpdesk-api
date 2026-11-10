@@ -1,6 +1,6 @@
 import { LifeBuoy } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Button } from '@/components/ui/button'
 import { Toaster } from '@/components/ui/sonner'
 import { roleLabels } from '@/lib/labels'
 import { cn } from '@/lib/utils'
@@ -12,7 +12,7 @@ const links = [
 ]
 
 export function Layout() {
-  const { users, current, setCurrentId } = useCurrentUser()
+  const { current, logout } = useCurrentUser()
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -41,28 +41,20 @@ export function Layout() {
             ))}
           </nav>
 
-          <div className="ml-auto flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Вы:</span>
+          <div className="ml-auto flex items-center gap-3">
             {current && (
-              <Select value={String(current.id)} onValueChange={(value) => setCurrentId(Number(value))}>
-                <SelectTrigger className="w-72">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {users.map((user) => (
-                    <SelectItem key={user.id} value={String(user.id)}>
-                      {user.name} ({roleLabels[user.role]})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <span className="text-sm">
+                {current.name} <span className="text-muted-foreground">({roleLabels[current.role]})</span>
+              </span>
             )}
+            <Button variant="outline" size="sm" onClick={logout}>
+              Выйти
+            </Button>
           </div>
         </div>
       </header>
 
-      {/* key заставляет страницы загрузить данные заново при смене пользователя */}
-      <main key={current?.id} className="mx-auto max-w-6xl px-4 py-6">
+      <main className="mx-auto max-w-6xl px-4 py-6">
         <Outlet />
       </main>
 

@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -12,16 +13,24 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { priorityLabels, priorityVariant, statusLabels } from '@/lib/labels'
+import { formatDate, priorityLabels, priorityVariant, statusLabels } from '@/lib/labels'
 import { api, errorText } from '@/lib/api'
 import { useCurrentUser } from '@/lib/user-context'
 import { toast } from 'sonner'
-import type { Tag, Ticket, User } from '@/lib/types'
+import type { AiDraft, Tag, Ticket, TicketStatus, User } from '@/lib/types'
 
+const transitions: Record<TicketStatus, TicketStatus[]> = {
+  new: ['in_progress', 'closed'],
+  in_progress: ['waiting_for_client', 'resolved', 'closed'],
+  waiting_for_client: ['in_progress', 'resolved', 'closed'],
+  resolved: ['in_progress', 'closed'],
+  closed: ['in_progress'],
+}
 export function TicketPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { current, isStaff } = useCurrentUser()
+  const { current, isStaff, isAdmin } = useCurrentUser()
+  const [staff, setStaff] = useState<User[]>([])
 
   const [ticket, setTicket] = useState<Ticket | null>(null)
   const [loading, setLoading] = useState(true)
@@ -29,9 +38,8 @@ export function TicketPage() {
   const [isInternal, setIsInternal] = useState(false)
   const [submittingMessage, setSubmittingMessage] = useState(false)
 
-  const [staffUsers, setStaffUsers] = useState<User[]>([])
   const [allTags, setAllTags] = useState<Tag[]>([])
-  const [selectedAssignee, setSelectedAssignee] = useState<string>('')
+  const [assigneeId, setAssigneeId] = useState<string>('')
   const [selectedTag, setSelectedTag] = useState<string>('')
   const [updating, setUpdating] = useState(false)
   const [aiDraftLoading, setAiDraftLoading] = useState(false)
@@ -39,16 +47,28 @@ export function TicketPage() {
   const fetchTicket = async () => {
     try {
       const res = await api<any>(`/tickets/${id}`)
-      // Извлекаем объект заявки, если Laravel завернул его в { data: ... }
       const item: Ticket = res?.data ?? res
       setTicket(item)
       if (item.assignee) {
-        setSelectedAssignee(String(item.assignee.id))
+        setAssigneeId(String(item.assignee.id))
       }
     } catch (err) {
       toast.error(errorText(err))
     } finally {
       setLoading(false)
+    }
+  }
+
+  const run = async (fn: () => Promise<any>, successText?: string) => {
+    setUpdating(true)
+    try {
+      await fn()
+      if (successText) toast.success(successText)
+      await fetchTicket()
+    } catch (err) {
+      toast.error(errorText(err))
+    } finally {
+      setUpdating(false)
     }
   }
 
@@ -58,13 +78,6 @@ export function TicketPage() {
 
   useEffect(() => {
     if (isStaff) {
-      api<{ data: User[] } | User[]>('/users')
-        .then((res) => {
-          const list = Array.isArray(res) ? res : res?.data || []
-          setStaffUsers(list.filter((u) => u.role === 'support' || u.role === 'admin'))
-        })
-        .catch(() => {})
-
       api<{ data: Tag[] } | Tag[]>('/tags')
         .then((res) => {
           const list = Array.isArray(res) ? res : res?.data || []
@@ -73,6 +86,14 @@ export function TicketPage() {
         .catch(() => {})
     }
   }, [isStaff])
+
+  useEffect(() => {
+    if (isAdmin) {
+      api<{ data: User[] }>('/users', { query: { per_page: 100 } })
+        .then((response) => setStaff(response.data.filter((user) => user.role !== 'client')))
+        .catch(() => setStaff([]))
+    }
+  }, [isAdmin])
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -84,9 +105,7 @@ export function TicketPage() {
         method: 'POST',
         body: {
           body: messageBody,
-          is_internal: isInternal,
-          user_id: current?.id,
-          author_id: current?.id,
+          is_internal: isStaff && isInternal,
         },
       })
       setMessageBody('')
@@ -104,11 +123,12 @@ export function TicketPage() {
     if (!ticket) return
     setAiDraftLoading(true)
     try {
-      const res = await api<{ draft: string }>(`/tickets/${ticket.id}/ai-draft`, {
+      const res = await api<AiDraft | { draft: string }>(`/tickets/${ticket.id}/ai-draft`, {
         method: 'POST',
       })
-      if (res?.draft) {
-        setMessageBody(res.draft)
+      const draft = 'draft' in res ? res.draft : (res as any)?.body
+      if (draft) {
+        setMessageBody(draft)
         toast.success('Черновик успешно сформирован')
       }
     } catch (err) {
@@ -118,59 +138,27 @@ export function TicketPage() {
     }
   }
 
-  const handleAssign = async () => {
-    if (!ticket || !selectedAssignee) return
-    setUpdating(true)
-    try {
-      await api(`/tickets/${ticket.id}/assign`, {
-        method: 'POST',
-        body: {
-          user_id: Number(selectedAssignee),
-          assignee_id: Number(selectedAssignee),
-        },
-      })
-      toast.success('Ответственный назначен')
-      await fetchTicket()
-    } catch (err) {
-      toast.error(errorText(err))
-    } finally {
-      setUpdating(false)
-    }
-  }
-
-  const handleChangeStatus = async (status: string) => {
+  const handleChangeStatus = async (newStatus: TicketStatus) => {
     if (!ticket) return
-    setUpdating(true)
-    try {
-      await api(`/tickets/${ticket.id}/status`, {
-        method: 'PATCH',
-        body: { status },
-      })
-      toast.success('Статус обновлен')
-      await fetchTicket()
-    } catch (err) {
-      toast.error(errorText(err))
-    } finally {
-      setUpdating(false)
-    }
+    await run(
+      () =>
+        api(`/tickets/${ticket.id}/status`, {
+          method: 'PATCH',
+          body: { status: newStatus },
+        }),
+      'Статус обновлен'
+    )
   }
 
   const handleAddTag = async () => {
     if (!ticket || !selectedTag) return
-    setUpdating(true)
-    try {
+    await run(async () => {
       await api(`/tickets/${ticket.id}/tags`, {
         method: 'POST',
         body: { tag_id: Number(selectedTag) },
       })
       setSelectedTag('')
-      toast.success('Тег добавлен')
-      await fetchTicket()
-    } catch (err) {
-      toast.error(errorText(err))
-    } finally {
-      setUpdating(false)
-    }
+    }, 'Тег добавлен')
   }
 
   const handleRemoveTag = async (tagId: number) => {
@@ -220,6 +208,8 @@ export function TicketPage() {
 
   const badgeVariant = (priorityVariant as Record<string, any>)?.[ticket.priority] || 'secondary'
   const authorName = ticket.author?.name || (ticket as any).client?.name || '—'
+  const nextStatuses = transitions[ticket.status] || []
+  const canChangeStatus = isAdmin || ticket.assignee?.id === current?.id
 
   return (
     <div className="space-y-6">
@@ -272,7 +262,7 @@ export function TicketPage() {
                             </Badge>
                           )}
                         </span>
-                        <span>{msg.created_at}</span>
+                        <span>{msg.created_at ? formatDate(msg.created_at) : '—'}</span>
                       </div>
                       <p className="whitespace-pre-wrap">{msg.body}</p>
                     </div>
@@ -361,11 +351,11 @@ export function TicketPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Создана</span>
-                <span>{ticket.created_at}</span>
+                <span>{ticket.created_at ? formatDate(ticket.created_at) : '—'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Решена</span>
-                <span>{ticket.resolved_at || '—'}</span>
+                <span>{ticket.resolved_at ? formatDate(ticket.resolved_at) : '—'}</span>
               </div>
 
               <div className="pt-2 border-t">
@@ -398,69 +388,72 @@ export function TicketPage() {
               </CardHeader>
               <CardContent className="space-y-4 text-sm">
                 <div className="space-y-2">
-                  <span className="font-medium">Ответственный</span>
-                  <div className="flex gap-2">
-                    <Select value={selectedAssignee} onValueChange={setSelectedAssignee}>
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Выберите" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {staffUsers.map((u) => (
-                          <SelectItem key={u.id} value={String(u.id)}>
-                            {u.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button variant="outline" size="sm" onClick={handleAssign} disabled={updating}>
-                      Назначить
+                  <Label>Ответственный</Label>
+                  {isAdmin ? (
+                    <div className="flex gap-2">
+                      <Select value={assigneeId} onValueChange={setAssigneeId}>
+                        <SelectTrigger className="flex-1">
+                          <SelectValue placeholder="Выберите" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {staff.map((user) => (
+                            <SelectItem key={user.id} value={String(user.id)}>
+                              {user.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        variant="secondary"
+                        disabled={!assigneeId || updating}
+                        onClick={() =>
+                          run(
+                            () =>
+                              api(`/tickets/${id}/assign`, {
+                                method: 'POST',
+                                body: { assignee_id: Number(assigneeId) },
+                              }),
+                            'Ответственный назначен'
+                          )
+                        }
+                      >
+                        Назначить
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="secondary"
+                      disabled={updating}
+                      onClick={() =>
+                        run(
+                          () => api(`/tickets/${id}/assign`, { method: 'POST' }),
+                          'Заявка взята в работу'
+                        )
+                      }
+                    >
+                      Взять в работу
                     </Button>
-                  </div>
+                  )}
                 </div>
 
                 <div className="space-y-2">
                   <span className="font-medium">Сменить статус</span>
                   <div className="flex flex-wrap gap-2">
-                    {String(ticket.status) !== 'in_progress' && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleChangeStatus('in_progress')}
-                        disabled={updating}
-                      >
-                        В работе
-                      </Button>
+                    {(!canChangeStatus || nextStatuses.length === 0) && (
+                      <span className="text-muted-foreground">Нет доступных переходов</span>
                     )}
-                    {String(ticket.status) !== 'waiting_client' && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleChangeStatus('waiting_client')}
-                        disabled={updating}
-                      >
-                        Ждёт клиента
-                      </Button>
-                    )}
-                    {String(ticket.status) !== 'resolved' && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleChangeStatus('resolved')}
-                        disabled={updating}
-                      >
-                        Решена
-                      </Button>
-                    )}
-                    {String(ticket.status) !== 'closed' && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleChangeStatus('closed')}
-                        disabled={updating}
-                      >
-                        Закрыть
-                      </Button>
-                    )}
+                    {canChangeStatus &&
+                      nextStatuses.map((next: TicketStatus) => (
+                        <Button
+                          key={next}
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleChangeStatus(next)}
+                          disabled={updating}
+                        >
+                          {statusLabels[next] || next}
+                        </Button>
+                      ))}
                   </div>
                 </div>
 
@@ -485,17 +478,19 @@ export function TicketPage() {
                   </div>
                 </div>
 
-                <div className="pt-3 border-t">
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    className="w-full gap-2"
-                    onClick={handleDeleteTicket}
-                  >
-                    <Trash2 className="size-4" />
-                    Удалить заявку
-                  </Button>
-                </div>
+                {isAdmin && (
+                  <div className="pt-3 border-t">
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="w-full gap-2"
+                      onClick={handleDeleteTicket}
+                    >
+                      <Trash2 className="size-4" />
+                      Удалить заявку
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}

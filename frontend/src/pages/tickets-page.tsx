@@ -38,8 +38,6 @@ export default function TicketsPage() {
           status: status === 'all' ? undefined : status,
           priority: priority === 'all' ? undefined : priority,
           search,
-          // клиент видит только свои заявки
-          user_id: isStaff ? undefined : current.id,
         },
       })
       setTickets(response.data)
@@ -50,7 +48,7 @@ export default function TicketsPage() {
     } finally {
       setLoading(false)
     }
-  }, [current, isStaff, page, status, priority, search])
+  }, [current, page, status, priority, search])
 
   useEffect(() => {
     load()
