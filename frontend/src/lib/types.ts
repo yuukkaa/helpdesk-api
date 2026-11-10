@@ -7,6 +7,7 @@ export interface User {
   name: string
   email: string
   role: Role
+  created_at?: string
 }
 
 export interface Category {
@@ -19,13 +20,17 @@ export interface Category {
 export interface Tag {
   id: number
   name: string
+  tickets_count?: number
 }
 
 export interface Attachment {
   id: number
   original_name: string
+  path?: string
+  url?: string
   mime_type: string
   size: number
+  created_at?: string
 }
 
 export interface Message {
@@ -44,6 +49,7 @@ export interface Ticket {
   description: string
   status: TicketStatus
   priority: TicketPriority
+  category_id?: number
   resolved_at: string | null
   created_at: string
   updated_at: string
@@ -51,6 +57,7 @@ export interface Ticket {
   assignee?: User | null
   category?: Category
   messages?: Message[]
+  messages_count?: number
   attachments?: Attachment[]
   tags?: Tag[]
 }
@@ -59,6 +66,7 @@ export interface Article {
   id: number
   title: string
   content: string
+  category_id?: number | null
   is_published: boolean
   created_at: string
   author?: User
@@ -67,7 +75,7 @@ export interface Article {
 
 export interface Paginated<T> {
   data: T[]
-  meta: { current_page: number; last_page: number; total: number }
+  meta: { current_page: number; last_page: number; per_page?: number; total: number }
 }
 
 export interface AiSuggestion {
@@ -80,4 +88,14 @@ export interface AiSuggestion {
 export interface AiDraft {
   draft: string
   sources: { id: number; title: string }[]
+}
+
+export interface TicketStatistics {
+  total_tickets: number
+  unassigned_tickets: number
+  avg_resolution_minutes: number
+  by_status: Record<string, number>
+  by_priority: Record<string, number>
+  by_category: { id: number; name: string; tickets: number; tickets_count?: number }[]
+  workload: { id: number; name: string; active_tickets: number }[]
 }

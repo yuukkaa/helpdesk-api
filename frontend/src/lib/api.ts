@@ -29,9 +29,11 @@ interface Options {
 
 /**
  * Общая функция отправки запросов к Laravel API:
- * - добавляет заголовки Accept: application/json, Content-Type: application/json и Authorization: Bearer <token>;
+ * - добавляет заголовки Accept: application/json, Content-Type: application/json (кроме FormData) и Authorization: Bearer <token>;
+ * - при передаче FormData НЕ устанавливает Content-Type: application/json, чтобы браузер сам выставил multipart/form-data с boundary;
  * - при ответе 401 удаляет токен и перенаправляет на страницу входа;
- * - при ответе 422 возвращает объект errors (в ApiError.errors) для вывода в форме;
+ * - при ответе 422 возвращает объект errors (в ApiError.errors) для вывода рядом с полями формы;
+ * - при ответе 409 возвращает сообщение о нарушении бизнес-правила (data.message);
  * - обрабатывает ошибки сети (0) и ошибки сервера (500+).
  */
 export async function api<T>(path: string, options: Options = {}): Promise<T> {
@@ -46,10 +48,15 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
   })
 
   const token = getToken()
+  const isFormData = options.body instanceof FormData
 
   const headers: Record<string, string> = {
     Accept: 'application/json',
-    'Content-Type': 'application/json',
+  }
+
+  // Для FormData заголовок Content-Type: application/json НЕ добавляется (п. 6 задания)
+  if (!isFormData) {
+    headers['Content-Type'] = 'application/json'
   }
 
   if (token) {
@@ -61,7 +68,12 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
     response = await fetch(url.toString(), {
       method: options.method ?? 'GET',
       headers,
-      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      body:
+        options.body !== undefined
+          ? isFormData
+            ? (options.body as FormData)
+            : JSON.stringify(options.body)
+          : undefined,
     })
   } catch {
     throw new ApiError('Ошибка сети: не удалось подключиться к серверу API.', 0)
