@@ -1,0 +1,29 @@
+info:
+  name: Пагинация
+  type: http
+  seq: 13
+
+http:
+  method: GET
+  url: "{{base_url}}/tickets?per_page=5&page=2&status=new"
+  params:
+    - name: per_page
+      value: "5"
+      type: query
+    - name: page
+      value: "2"
+      type: query
+    - name: status
+      value: new
+      type: query
+  body:
+    type: json
+    data: ""
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

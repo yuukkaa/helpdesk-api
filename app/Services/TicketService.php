@@ -2,47 +2,42 @@
 
 namespace App\Services;
 
+use App\Enums\TicketStatus;
+use App\Enums\UserRole;
 use App\Exceptions\BusinessException;
+use App\Mail\TicketStatusChangedMail;
 use App\Models\Category;
 use App\Models\Message;
+use App\Models\Tag;
 use App\Models\Ticket;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class TicketService
 {
     public const MAX_ACTIVE_TICKETS_PER_AGENT = 5;
 
-    public function getPaginatedTickets(array $params): LengthAwarePaginator
+    /**
+     * Список заявок с фильтрацией, поиском, сортировкой и пагинацией.
+     */
+    public function getPaginatedTickets(array $params, ?User $viewer = null): LengthAwarePaginator
     {
-        $perPage = (int) ($params['per_page'] ?? 10);
+        $perPage = min(max((int) ($params['per_page'] ?? 10), 1), 100);
+
+        if ($viewer && $viewer->role === UserRole::Client) {
+            $params['user_id'] = $viewer->id;
+        }
 
         return Ticket::query()
-<<<<<<< HEAD
-            ->with(self::LIST_RELATIONS)
-            ->when($filters['status'] ?? null, fn ($q, $v) => $q->where('status', $v))
-            ->when($filters['priority'] ?? null, fn ($q, $v) => $q->where('priority', $v))
-            ->when($filters['category_id'] ?? null, fn ($q, $v) => $q->where('category_id', $v))
-            ->when($filters['assignee_id'] ?? null, fn ($q, $v) => $q->where('assignee_id', $v))
-            ->when($filters['user_id'] ?? null, fn ($q, $v) => $q->where('user_id', $v))
-            ->when($filters['search'] ?? null, function ($q, $v) {
-                $q->where(function ($q) use ($v) {
-                    $q->where('subject', 'like', "%{$v}%")
-                        ->orWhere('description', 'like', "%{$v}%");
-                });
-=======
             ->with(['category', 'author', 'assignee', 'tags'])
             ->withCount('messages')
-            ->when($params['owner_only_user_id'] ?? null, function ($q, $userId) {
-                $columns = Schema::getColumnListing('tickets');
-                $col = in_array('user_id', $columns, true) ? 'user_id' : (in_array('author_id', $columns, true) ? 'author_id' : 'client_id');
-                $q->where($col, $userId);
->>>>>>> a77fea0 (Бизнес-логика, фильтрация и пагинация (КП9))
-            })
             ->filter($params)
             ->search($params['search'] ?? null)
             ->sort($params['sort'] ?? 'id', $params['order'] ?? 'desc')
@@ -50,11 +45,19 @@ class TicketService
             ->withQueryString();
     }
 
-    public function createTicket(array $data): Ticket
+    /**
+     * Создание новой заявки.
+     */
+    public function createTicket(array $data, ?User $author = null): Ticket
     {
-        return DB::transaction(function () use ($data) {
+        return DB::transaction(function () use ($data, $author) {
             $columns = Schema::getColumnListing('tickets');
-            $authorId = $data['author_id'] ?? $data['client_id'] ?? $data['user_id'] ?? User::first()?->id ?? 1;
+            $authorId = $author?->id
+                ?? $data['user_id']
+                ?? $data['author_id']
+                ?? $data['client_id']
+                ?? User::first()?->id
+                ?? 1;
 
             $payload = [
                 'subject' => $data['subject'] ?? $data['title'] ?? 'Обращение',
@@ -62,7 +65,7 @@ class TicketService
                 'description' => $data['description'] ?? '',
                 'category_id' => $data['category_id'],
                 'priority' => $data['priority'] ?? 'medium',
-                'status' => 'new',
+                'status' => TicketStatus::New->value,
                 'user_id' => $authorId,
                 'author_id' => $authorId,
                 'client_id' => $authorId,
@@ -75,49 +78,85 @@ class TicketService
             $filtered = array_intersect_key($payload, array_flip($columns));
             $ticket = Ticket::create($filtered);
 
-            if (!empty($data['tags']) && is_array($data['tags'])) {
-                try {
-                    $ticket->tags()->sync($data['tags']);
-                } catch (\Throwable) {}
+            if (! empty($data['tags']) && is_array($data['tags'])) {
+                $ticket->tags()->sync($data['tags']);
             }
 
-            Log::info('Ticket created', [
+            if (! empty($data['attachments']) && is_array($data['attachments'])) {
+                $this->storeAttachments($ticket, $data['attachments']);
+            }
+
+            Log::info('Создана новая заявка', [
                 'ticket_id' => $ticket->id,
                 'subject' => $ticket->subject,
                 'priority' => $ticket->priority,
-                'author_id' => $authorId,
+                'category_id' => $ticket->category_id,
+                'user_id' => $authorId,
             ]);
 
-            return $ticket->load(['category', 'author', 'assignee', 'tags']);
+            return $ticket->load(['category', 'author', 'assignee', 'tags', 'attachments']);
         });
     }
 
+    /**
+     * Обновление полей заявки (тема, описание, категория, приоритет, теги).
+     */
+    public function updateTicket(Ticket $ticket, array $data): Ticket
+    {
+        return DB::transaction(function () use ($ticket, $data) {
+            $columns = Schema::getColumnListing('tickets');
+            $updatable = array_intersect_key(
+                array_diff_key($data, array_flip(['tags', 'attachments'])),
+                array_flip($columns)
+            );
+
+            $ticket->update($updatable);
+
+            if (array_key_exists('tags', $data) && is_array($data['tags'])) {
+                $ticket->tags()->sync($data['tags']);
+            }
+
+            Log::info('Обновлена заявка', [
+                'ticket_id' => $ticket->id,
+                'updated_fields' => array_keys($updatable),
+            ]);
+
+            return $ticket->load(['category', 'author', 'assignee', 'tags', 'attachments', 'messages.author']);
+        });
+    }
+
+    /**
+     * Назначение ответственного специалиста.
+     */
     public function assignAgent(int $ticketId, int $agentId): Ticket
     {
         return DB::transaction(function () use ($ticketId, $agentId) {
             $ticket = Ticket::query()->lockForUpdate()->findOrFail($ticketId);
             $agent = User::query()->lockForUpdate()->findOrFail($agentId);
 
-            $currentStatus = is_string($ticket->status) ? $ticket->status : $ticket->status->value;
-            if ($currentStatus === 'closed') {
-                Log::warning('Attempt to assign agent to closed ticket', ['ticket_id' => $ticketId, 'agent_id' => $agentId]);
-                throw new BusinessException('Нельзя назначить исполнителя для уже закрытой заявки.', 409);
+            $currentStatus = $ticket->statusValue();
+            if (in_array($currentStatus, [TicketStatus::Resolved->value, TicketStatus::Closed->value], true)) {
+                throw new BusinessException(
+                    'Нельзя назначить ответственного для решённой или закрытой заявки.',
+                    409
+                );
             }
 
             $role = is_string($agent->role) ? $agent->role : ($agent->role->value ?? 'client');
-            if (!in_array($role, ['support', 'admin'], true)) {
-                Log::warning('Invalid assignee role', ['ticket_id' => $ticketId, 'agent_id' => $agentId, 'role' => $role]);
-                throw new BusinessException('Назначить исполнителем можно только сотрудника поддержки (support) или администратора (admin).', 409);
+            if (! in_array($role, ['support', 'admin'], true)) {
+                throw new BusinessException(
+                    'Назначить исполнителем можно только сотрудника поддержки (support) или администратора (admin).',
+                    409
+                );
             }
 
             $activeCount = Ticket::query()
                 ->where('assignee_id', $agent->id)
-                ->whereIn('status', ['in_progress', 'waiting_client'])
+                ->whereIn('status', ['in_progress', 'waiting_for_client', 'waiting_client'])
                 ->where('id', '!=', $ticket->id)
                 ->count();
 
             if ($activeCount >= self::MAX_ACTIVE_TICKETS_PER_AGENT) {
-                Log::warning('Agent workload limit exceeded', ['agent_id' => $agent->id, 'active_count' => $activeCount]);
                 throw new BusinessException(
                     "Превышен лимит нагрузки: у специалиста {$agent->name} уже в работе {$activeCount} активных заявок (максимум " . self::MAX_ACTIVE_TICKETS_PER_AGENT . ").",
                     409
@@ -125,8 +164,8 @@ class TicketService
             }
 
             $ticket->assignee_id = $agent->id;
-            if ($currentStatus === 'new') {
-                $ticket->status = 'in_progress';
+            if ($currentStatus === TicketStatus::New->value) {
+                $ticket->status = TicketStatus::InProgress->value;
             }
             $ticket->save();
 
@@ -141,102 +180,234 @@ class TicketService
             ];
             Message::create(array_intersect_key($msgData, array_flip($msgCols)));
 
-            Log::info('Ticket assigned to agent', [
+            Log::info('Назначен ответственный специалист по заявке', [
                 'ticket_id' => $ticket->id,
-                'agent_id' => $agent->id,
-                'agent_name' => $agent->name,
+                'assignee_id' => $agent->id,
+                'assignee_name' => $agent->name,
+                'status' => $ticket->status,
             ]);
 
-            return $ticket->load(['category', 'author', 'assignee', 'tags', 'messages.author']);
+            return $ticket->load(['category', 'author', 'assignee', 'tags', 'messages.author', 'attachments']);
         });
     }
 
+    /**
+     * Смена статуса заявки с проверкой допустимого перехода.
+     */
     public function changeStatus(int $ticketId, string $newStatusValue): Ticket
     {
         return DB::transaction(function () use ($ticketId, $newStatusValue) {
             $ticket = Ticket::query()->lockForUpdate()->findOrFail($ticketId);
 
-            $currentStatus = is_string($ticket->status) ? $ticket->status : $ticket->status->value;
-
-            if ($currentStatus === 'closed') {
-                throw new BusinessException('Недопустимый переход статуса: нельзя перевести закрытую заявку.', 409);
+            if ($newStatusValue === 'waiting_client') {
+                $newStatusValue = TicketStatus::WaitingForClient->value;
             }
 
-            if ($currentStatus === 'resolved' && $newStatusValue === 'waiting_client') {
-                throw new BusinessException('Недопустимый переход статуса: нельзя перевести заявку из статуса «Решена» в «Ждёт клиента».', 409);
+            $currentStatusValue = $ticket->statusValue();
+            $currentEnum = TicketStatus::tryFrom($currentStatusValue);
+            $newEnum = TicketStatus::tryFrom($newStatusValue);
+
+            if (! $newEnum) {
+                throw new BusinessException("Недопустимый статус: {$newStatusValue}.", 422);
             }
 
-            if ($newStatusValue === 'resolved' && empty($ticket->assignee_id)) {
-                throw new BusinessException('Нельзя решить заявку без назначенного ответственного специалиста.', 409);
+            if ($currentStatusValue === TicketStatus::Closed->value) {
+                throw new BusinessException(
+                    'Недопустимый переход статуса: нельзя перевести закрытую заявку.',
+                    409
+                );
             }
 
-            $ticket->status = $newStatusValue;
-            if ($newStatusValue === 'resolved') {
+            if ($currentEnum && ! $currentEnum->canTransitionTo($newEnum)) {
+                throw new BusinessException(
+                    "Переход из статуса «{$currentEnum->value}» в «{$newEnum->value}» недопустим.",
+                    409
+                );
+            }
+
+            if (in_array($newEnum, [TicketStatus::InProgress, TicketStatus::Resolved], true) && empty($ticket->assignee_id)) {
+                throw new BusinessException(
+                    'Сначала назначьте ответственного специалиста.',
+                    409
+                );
+            }
+
+            $ticket->status = $newEnum->value;
+            if ($newEnum === TicketStatus::Resolved) {
                 $ticket->resolved_at = now();
+            } elseif ($newEnum !== TicketStatus::Closed) {
+                $ticket->resolved_at = null;
             }
             $ticket->save();
 
-            Log::info('Ticket status changed', [
+            Log::info('Изменён статус заявки', [
                 'ticket_id' => $ticket->id,
-                'old_status' => $currentStatus,
-                'new_status' => $newStatusValue,
+                'old_status' => $currentStatusValue,
+                'new_status' => $newEnum->value,
+                'assignee_id' => $ticket->assignee_id,
             ]);
 
-            return $ticket->load(['category', 'author', 'assignee', 'tags', 'messages.author']);
+            // Отправка уведомления автору заявки по почте (драйвер log)
+            $ticket->load(['author']);
+            if ($ticket->author?->email) {
+                try {
+                    Mail::to($ticket->author->email)->send(
+                        new TicketStatusChangedMail($ticket, $currentStatusValue, $newEnum->value)
+                    );
+                } catch (\Throwable $e) {
+                    Log::warning('Не удалось отправить email-уведомление о смене статуса', [
+                        'ticket_id' => $ticket->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+
+            return $ticket->load(['category', 'author', 'assignee', 'tags', 'messages.author', 'attachments']);
         });
     }
 
-    public function getStatistics(): array
+    /**
+     * Удаление заявки вместе с файлами вложений.
+     */
+    public function deleteTicket(Ticket $ticket): void
     {
-        $byStatus = Ticket::query()
-            ->selectRaw('status, COUNT(*) as count')
-            ->groupBy('status')
-            ->pluck('count', 'status');
+        $id = $ticket->id;
+        $paths = $ticket->attachments()->pluck('path')->all();
 
-        $byPriority = Ticket::query()
-            ->selectRaw('priority, COUNT(*) as count')
-            ->groupBy('priority')
-            ->pluck('count', 'priority');
+        $ticket->delete();
 
-        $byCategory = Category::query()
-            ->withCount('tickets')
-            ->orderByDesc('tickets_count')
-            ->get(['id', 'name']);
+        if (! empty($paths)) {
+            Storage::disk('public')->delete($paths);
+        }
 
-        return [
-            'total_tickets' => Ticket::count(),
-            'unassigned_tickets' => Ticket::whereNull('assignee_id')->count(),
-            'by_status' => $byStatus,
-            'by_priority' => $byPriority,
-            'by_category' => $byCategory,
-        ];
+        Log::info('Заявка удалена', ['ticket_id' => $id]);
     }
 
     /**
-     * Пункт 5 (дополнительно): Экспорт списка заявок в CSV.
+     * Добавление меток к заявке.
      */
-    public function exportToCsv(): string
+    public function attachTags(Ticket $ticket, array $tagIds): Ticket
     {
-        $tickets = Ticket::with(['category', 'author', 'assignee'])->latest('id')->get();
+        $ticket->tags()->syncWithoutDetaching($tagIds);
 
-        $lines = [];
-        $lines[] = implode(';', ['ID', 'Тема', 'Категория', 'Статус', 'Приоритет', 'Автор', 'Ответственный', 'Создана']);
+        Log::info('К заявке прикреплены метки', [
+            'ticket_id' => $ticket->id,
+            'tag_ids' => $tagIds,
+        ]);
 
-        foreach ($tickets as $t) {
-            $lines[] = implode(';', [
-                $t->id,
-                str_replace(';', ',', (string) $t->subject),
-                $t->category?->name ?? '-',
-                $t->status,
-                $t->priority,
-                $t->author?->name ?? '-',
-                $t->assignee?->name ?? 'Не назначен',
-                $t->created_at?->format('Y-m-d H:i') ?? '-',
-            ]);
+        return $ticket->load(['category', 'author', 'assignee', 'tags', 'messages.author', 'attachments']);
+    }
+
+    /**
+     * Синхронизация всех меток заявки.
+     */
+    public function syncTags(Ticket $ticket, array $tagIds): Ticket
+    {
+        $ticket->tags()->sync($tagIds);
+
+        Log::info('Синхронизированы метки заявки', [
+            'ticket_id' => $ticket->id,
+            'tag_ids' => $tagIds,
+        ]);
+
+        return $ticket->load(['category', 'author', 'assignee', 'tags', 'messages.author', 'attachments']);
+    }
+
+    /**
+     * Снятие метки с заявки.
+     */
+    public function detachTag(Ticket $ticket, Tag $tag): Ticket
+    {
+        if (! $ticket->tags()->whereKey($tag->id)->exists()) {
+            throw new BusinessException('У заявки нет такой метки.', 409);
         }
 
-        Log::info('Tickets exported to CSV', ['count' => $tickets->count()]);
+        $ticket->tags()->detach($tag->id);
 
-        return "\xEF\xBB\xBF" . implode("\n", $lines);
+        Log::info('С заявки снята метка', [
+            'ticket_id' => $ticket->id,
+            'tag_id' => $tag->id,
+        ]);
+
+        return $ticket->load(['category', 'author', 'assignee', 'tags', 'messages.author', 'attachments']);
+    }
+
+    /**
+     * Экспорт заявок в формат CSV (п. 5 задания).
+     */
+    public function exportToCsv(array $filters = []): string
+    {
+        $tickets = Ticket::query()
+            ->with(['category', 'author', 'assignee'])
+            ->filter($filters)
+            ->orderByDesc('id')
+            ->get();
+
+        $handle = fopen('php://temp', 'r+');
+        // UTF-8 BOM для корректного открытия в Excel
+        fwrite($handle, "\xEF\xBB\xBF");
+
+        fputcsv($handle, [
+            'ID',
+            'Тема',
+            'Статус',
+            'Приоритет',
+            'Категория',
+            'Автор',
+            'Исполнитель',
+            'Дата создания',
+            'Дата решения',
+        ], ';');
+
+        foreach ($tickets as $ticket) {
+            fputcsv($handle, [
+                $ticket->id,
+                $ticket->subject,
+                $ticket->statusValue(),
+                $ticket->priorityValue(),
+                $ticket->category?->name ?? '—',
+                $ticket->author?->name ?? '—',
+                $ticket->assignee?->name ?? 'Не назначен',
+                $ticket->created_at?->format('Y-m-d H:i:s'),
+                $ticket->resolved_at?->format('Y-m-d H:i:s') ?? '—',
+            ], ';');
+        }
+
+        rewind($handle);
+        $csv = (string) stream_get_contents($handle);
+        fclose($handle);
+
+        Log::info('Выполнен экспорт заявок в CSV', ['count' => $tickets->count()]);
+
+        return $csv;
+    }
+
+    /**
+     * Сводная статистика (КП9).
+     */
+    public function getStatistics(): array
+    {
+        return app(StatisticsService::class)->tickets();
+    }
+
+    /**
+     * Сохранение файлов вложений через Storage (диск public).
+     *
+     * @param  list<UploadedFile>  $files
+     */
+    private function storeAttachments(Ticket $ticket, array $files): void
+    {
+        foreach ($files as $file) {
+            if (! $file instanceof UploadedFile) {
+                continue;
+            }
+
+            $ticket->attachments()->create([
+                'original_name' => $file->getClientOriginalName(),
+                'path' => $file->store('attachments', 'public'),
+                'mime_type' => $file->getClientMimeType(),
+                'size' => $file->getSize(),
+            ]);
+        }
     }
 }

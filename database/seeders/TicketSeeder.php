@@ -18,14 +18,14 @@ class TicketSeeder extends Seeder
     public function run(): void
     {
         Schema::disableForeignKeyConstraints();
-
-        Message::query()->delete();
         try {
+            Message::query()->delete();
             DB::table('ticket_tag')->delete();
-        } catch (Throwable) {
-        }
+        } catch (Throwable) {}
+        try {
+            DB::table('tag_ticket')->delete();
+        } catch (Throwable) {}
         Ticket::query()->delete();
-
         Schema::enableForeignKeyConstraints();
 
         $support1 = User::where('role', 'support')->first() ?? User::first();
@@ -33,10 +33,9 @@ class TicketSeeder extends Seeder
         $client1 = User::where('role', 'client')->first() ?? User::first();
         $client2 = User::where('role', 'client')->skip(1)->first() ?? $client1;
 
-        $catAccess = Category::where('name', 'like', '%Доступ%')->orWhere('name', 'like', '%парол%')->first() ?? Category::first();
-        $catFinance = Category::where('name', 'like', '%Оплат%')->orWhere('name', 'like', '%счет%')->first() ?? Category::first();
-        $catTech = Category::where('name', 'like', '%Технич%')->orWhere('name', 'like', '%ошибк%')->first() ?? Category::first();
-        $catGeneral = Category::where('name', 'like', '%Общ%')->first() ?? Category::first();
+        $catAccess = Category::where('name', 'like', '%Доступ%')->first() ?? Category::first();
+        $catFinance = Category::where('name', 'like', '%Оплат%')->first() ?? Category::first();
+        $catTech = Category::where('name', 'like', '%Технич%')->first() ?? Category::first();
 
         $tagAccount = Tag::where('name', 'like', '%аккаунт%')->first();
         $tagUrgent = Tag::where('name', 'like', '%срочн%')->first();
@@ -47,19 +46,19 @@ class TicketSeeder extends Seeder
             [
                 'subject' => 'Не могу войти в личный кабинет',
                 'title' => 'Не могу войти в личный кабинет',
-                'description' => 'Здравствуйте! При попытке авторизации в системе появляется сообщение «Неверный логин или пароль». Кнопка восстановления пароля не срабатывает, письмо не приходит на почту.',
+                'description' => 'Здравствуйте! При попытке входа в систему появляется сообщение «Неверный логин или пароль». Кнопка восстановления пароля не срабатывает, письмо не приходит.',
                 'status' => 'in_progress',
                 'priority' => 'urgent',
-                'category_id' => $catAccess->id,
-                'author_id' => $client1->id,
-                'client_id' => $client1->id,
-                'user_id' => $client1->id,
-                'assignee_id' => $support1->id,
+                'category_id' => $catAccess?->id ?? 1,
+                'author_id' => $client1?->id ?? 1,
+                'client_id' => $client1?->id ?? 1,
+                'user_id' => $client1?->id ?? 1,
+                'assignee_id' => $support1?->id ?? 1,
                 'tags' => array_filter([$tagAccount?->id, $tagUrgent?->id]),
                 'messages' => [
-                    ['author_id' => $client1->id, 'is_internal' => false, 'body' => 'Пробовал вводить пароль вручную и копировать из менеджера паролей — войти всё равно не удается.'],
-                    ['author_id' => $support1->id, 'is_internal' => true, 'body' => 'Учетная запись была временно заблокирована из-за 5 неудачных попыток ввода. Сняла блокировку.'],
-                    ['author_id' => $support1->id, 'is_internal' => false, 'body' => 'Здравствуйте! Мы разблокировали вашу учетную запись и выслали ссылку для сброса пароля. Пожалуйста, проверьте почту.'],
+                    ['author_id' => $client1?->id ?? 1, 'is_internal' => false, 'body' => 'Пробовал вводить пароль вручную и копировать — войти всё равно не удается.'],
+                    ['author_id' => $support1?->id ?? 1, 'is_internal' => true, 'body' => 'Учетная запись была заблокирована из-за 5 неудачных попыток ввода. Сняла блокировку.'],
+                    ['author_id' => $support1?->id ?? 1, 'is_internal' => false, 'body' => 'Здравствуйте! Мы разблокировали вашу учетную запись и выслали ссылку для смены пароля. Проверьте почту.'],
                 ],
             ],
             [
@@ -68,31 +67,31 @@ class TicketSeeder extends Seeder
                 'description' => 'Добрый день. Отправила запрос на сброс пароля 20 минут назад, но письмо на ящик так и не поступило. Папку со спамом проверяла.',
                 'status' => 'in_progress',
                 'priority' => 'high',
-                'category_id' => $catAccess->id,
-                'author_id' => $client1->id,
-                'client_id' => $client1->id,
-                'user_id' => $client1->id,
-                'assignee_id' => $support1->id,
+                'category_id' => $catAccess?->id ?? 1,
+                'author_id' => $client1?->id ?? 1,
+                'client_id' => $client1?->id ?? 1,
+                'user_id' => $client1?->id ?? 1,
+                'assignee_id' => $support1?->id ?? 1,
                 'tags' => array_filter([$tagAccount?->id]),
                 'messages' => [
-                    ['author_id' => $support1->id, 'is_internal' => true, 'body' => 'Почтовый шлюз задержал письмо из-за фильтрации. Отправила повторно напрямую.'],
-                    ['author_id' => $support1->id, 'is_internal' => false, 'body' => 'Здравствуйте! Мы повторно направили письмо со ссылкой на сброс пароля. Срок действия ссылки — 1 час.'],
+                    ['author_id' => $support1?->id ?? 1, 'is_internal' => true, 'body' => 'Почтовый шлюз задержал письмо из-за фильтрации. Отправила повторно напрямую.'],
+                    ['author_id' => $support1?->id ?? 1, 'is_internal' => false, 'body' => 'Здравствуйте! Мы повторно направили письмо со ссылкой на сброс пароля. Срок действия ссылки — 1 час.'],
                 ],
             ],
             [
                 'subject' => 'Запрос на смену email в учётной записи',
                 'title' => 'Запрос на смену email в учётной записи',
-                'description' => 'Прошу привязать к моему профилю новый рабочий email-адрес в связи со сменой домена компании.',
-                'status' => 'waiting_client',
+                'description' => 'Прошу привязать к моему профилю новый рабочий email-адрес в связи со сменой почтового сервера компании.',
+                'status' => 'waiting_for_client',
                 'priority' => 'medium',
-                'category_id' => $catAccess->id,
-                'author_id' => $client1->id,
-                'client_id' => $client1->id,
-                'user_id' => $client1->id,
-                'assignee_id' => $support2->id,
+                'category_id' => $catAccess?->id ?? 1,
+                'author_id' => $client1?->id ?? 1,
+                'client_id' => $client1?->id ?? 1,
+                'user_id' => $client1?->id ?? 1,
+                'assignee_id' => $support2?->id ?? 1,
                 'tags' => array_filter([$tagAccount?->id]),
                 'messages' => [
-                    ['author_id' => $support2->id, 'is_internal' => false, 'body' => 'Здравствуйте! Для подтверждения смены email сообщите, пожалуйста, ваш новый адрес электронной почты.'],
+                    ['author_id' => $support2?->id ?? 1, 'is_internal' => false, 'body' => 'Здравствуйте! Для подтверждения смены email сообщите, пожалуйста, ваш новый адрес электронной почты.'],
                 ],
             ],
             [
@@ -101,17 +100,17 @@ class TicketSeeder extends Seeder
                 'description' => 'При попытке открыть прикрепленный файл PDF появляется белый экран и ошибка загрузки. Другие файлы скачиваются без проблем.',
                 'status' => 'resolved',
                 'priority' => 'medium',
-                'category_id' => $catTech->id,
-                'author_id' => $client2->id,
-                'client_id' => $client2->id,
-                'user_id' => $client2->id,
-                'assignee_id' => $support1->id,
+                'category_id' => $catTech?->id ?? 1,
+                'author_id' => $client2?->id ?? 1,
+                'client_id' => $client2?->id ?? 1,
+                'user_id' => $client2?->id ?? 1,
+                'assignee_id' => $support1?->id ?? 1,
                 'resolved_at' => now(),
                 'tags' => array_filter([$tagBug?->id]),
                 'messages' => [
-                    ['author_id' => $client2->id, 'is_internal' => false, 'body' => 'Проверял в Chrome и Edge — ошибка повторяется.'],
-                    ['author_id' => $support1->id, 'is_internal' => true, 'body' => 'Перезалили поврежденный файл в хранилище storage.'],
-                    ['author_id' => $support1->id, 'is_internal' => false, 'body' => 'Здравствуйте! Документ перезалит, файл проверен и открывается корректно. Пожалуйста, обновите страницу.'],
+                    ['author_id' => $client2?->id ?? 1, 'is_internal' => false, 'body' => 'Проверял в Chrome и Edge — ошибка повторяется.'],
+                    ['author_id' => $support1?->id ?? 1, 'is_internal' => true, 'body' => 'Перезалили поврежденный файл в хранилище storage.'],
+                    ['author_id' => $support1?->id ?? 1, 'is_internal' => false, 'body' => 'Здравствуйте! Документ перезалит, файл проверен и открывается корректно. Пожалуйста, обновите страницу.'],
                 ],
             ],
             [
@@ -120,84 +119,77 @@ class TicketSeeder extends Seeder
                 'description' => 'В счёте за октябрь одна и та же услуга рассчитана два раза. Прошу скорректировать документ перед оплатой.',
                 'status' => 'new',
                 'priority' => 'high',
-                'category_id' => $catFinance->id,
-                'author_id' => $client2->id,
-                'client_id' => $client2->id,
-                'user_id' => $client2->id,
-                'assignee_id' => $support2->id,
+                'category_id' => $catFinance?->id ?? 1,
+                'author_id' => $client2?->id ?? 1,
+                'client_id' => $client2?->id ?? 1,
+                'user_id' => $client2?->id ?? 1,
+                'assignee_id' => $support2?->id ?? 1,
                 'tags' => array_filter([$tagBilling?->id]),
                 'messages' => [
-                    ['author_id' => $client2->id, 'is_internal' => false, 'body' => 'Номер сформированного счёта: INV-2026-1042.'],
+                    ['author_id' => $client2?->id ?? 1, 'is_internal' => false, 'body' => 'Номер сформированного счёта: INV-2026-1042.'],
                 ],
             ],
             [
-                'subject' => 'Тормозит загрузка страницы заказов',
-                'title' => 'Тормозит загрузка страницы заказов',
-                'description' => 'При переходе во вкладку заказов таблица открывается больше 15 секунд при установке фильтра за текущий месяц.',
+                'subject' => 'Ошибка 500 при выгрузке отчёта в Excel',
+                'title' => 'Ошибка 500 при выгрузке отчёта в Excel',
+                'description' => 'При нажатии кнопки «Экспорт в XLSX» за квартал страница зависает и выдает ошибку сервера 500. Выгрузка за один день работает нормально.',
                 'status' => 'in_progress',
-                'priority' => 'medium',
-                'category_id' => $catTech->id,
-                'author_id' => $client2->id,
-                'client_id' => $client2->id,
-                'user_id' => $client2->id,
-                'assignee_id' => $support2->id,
-                'tags' => array_filter([$tagBug?->id]),
+                'priority' => 'urgent',
+                'category_id' => $catTech?->id ?? 1,
+                'author_id' => $client1?->id ?? 1,
+                'client_id' => $client1?->id ?? 1,
+                'user_id' => $client1?->id ?? 1,
+                'assignee_id' => $support1?->id ?? 1,
+                'tags' => array_filter([$tagBug?->id, $tagUrgent?->id]),
                 'messages' => [
-                    ['author_id' => $support2->id, 'is_internal' => true, 'body' => 'Добавили составной индекс по дате и статусу заказа в базе данных.'],
-                    ['author_id' => $support2->id, 'is_internal' => false, 'body' => 'Здравствуйте! Запросы были оптимизированы, скорость загрузки раздела восстановлена.'],
+                    ['author_id' => $support1?->id ?? 1, 'is_internal' => true, 'body' => 'Увеличили лимит памяти PHP для генерации XLSX и добавили пакетную обработку строк.'],
+                    ['author_id' => $support1?->id ?? 1, 'is_internal' => false, 'body' => 'Здравствуйте! Мы оптимизировали формирование больших отчетов. Пожалуйста, проверьте выгрузку за квартал сейчас.'],
                 ],
             ],
         ];
+
+        $ticketCols = Schema::getColumnListing('tickets');
+        $msgCols = Schema::getColumnListing('messages');
 
         foreach ($items as $data) {
             $messages = $data['messages'];
             $tags = $data['tags'];
             unset($data['messages'], $data['tags']);
 
-            $ticket = $this->createRecord(Ticket::class, $data);
+            $filtered = [];
+            foreach ($data as $k => $v) {
+                if (in_array($k, $ticketCols, true)) {
+                    $filtered[$k] = $v;
+                }
+            }
 
-            if (method_exists($ticket, 'tags')) {
+            if (in_array('slug', $ticketCols, true) && empty($filtered['slug'])) {
+                $filtered['slug'] = 'ticket-' . Str::lower(Str::random(8));
+            }
+
+            $ticket = Ticket::create($filtered);
+
+            if (!empty($tags)) {
                 try {
                     $ticket->tags()->sync($tags);
-                } catch (Throwable) {
-                }
+                } catch (Throwable) {}
             }
 
             foreach ($messages as $msg) {
-                try {
-                    $this->createRecord(Message::class, [
-                        'ticket_id' => $ticket->id,
-                        'author_id' => $msg['author_id'],
-                        'user_id' => $msg['author_id'],
-                        'body' => $msg['body'],
-                        'content' => $msg['body'],
-                        'is_internal' => $msg['is_internal'],
-                    ]);
-                } catch (Throwable) {
+                $fMsg = [];
+                $msg['ticket_id'] = $ticket->id;
+                $msg['user_id'] = $msg['author_id'];
+                $msg['content'] = $msg['body'];
+
+                foreach ($msg as $mk => $mv) {
+                    if (in_array($mk, $msgCols, true)) {
+                        $fMsg[$mk] = $mv;
+                    }
                 }
+                try {
+                    Message::create($fMsg);
+                } catch (Throwable) {}
             }
         }
-    }
-
-    private function createRecord(string $modelClass, array $attributes)
-    {
-        $model = new $modelClass();
-        $table = $model->getTable();
-        $columns = Schema::getColumnListing($table);
-
-        $filtered = [];
-        foreach ($attributes as $key => $value) {
-            if (in_array($key, $columns, true)) {
-                $filtered[$key] = $value;
-            }
-        }
-
-        if (in_array('slug', $columns, true) && empty($filtered['slug'])) {
-            $source = (string) ($attributes['slug'] ?? $attributes['title'] ?? $attributes['subject'] ?? 'ticket');
-            $slug = Str::slug($source, '-', 'ru');
-            $filtered['slug'] = $slug !== '' ? $slug . '-' . Str::lower(Str::random(4)) : 'ticket-' . Str::lower(Str::random(6));
-        }
-
-        return $modelClass::query()->create($filtered);
     }
 }

@@ -2,20 +2,18 @@
 
 namespace App\Exceptions;
 
-use Exception;
+use RuntimeException;
 
-class BusinessException extends Exception
+/** Нарушение бизнес-правила: выводится в bootstrap/app.php с кодом 409 или 422. */
+class BusinessException extends RuntimeException
 {
-    protected int $statusCode;
-
-    public function __construct(string $message = 'Нарушение бизнес-правила', int $statusCode = 409)
+    public function __construct(string $message, private readonly int $status = 409)
     {
-        parent::__construct($message,$statusCode);
-        $this->statusCode =$statusCode;
+        parent::__construct($message);
     }
 
-    public function getStatusCode(): int
+    public function status(): int
     {
-        return $this->statusCode ?: 409;
+        return $this->status;
     }
 }

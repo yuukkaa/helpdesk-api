@@ -1,0 +1,19 @@
+info:
+  name: Выход
+  type: http
+  seq: 8
+
+http:
+  method: POST
+  url: "{{base_url}}/logout"
+  body:
+    type: json
+    data: ""
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

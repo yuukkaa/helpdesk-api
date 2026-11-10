@@ -3,131 +3,134 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreKnowledgeBaseArticleRequest;
+use App\Http\Requests\UpdateKnowledgeBaseArticleRequest;
+use App\Http\Resources\KnowledgeBaseArticleResource;
 use App\Models\KnowledgeBaseArticle;
+use App\Models\User;
+use App\Services\KnowledgeBaseArticleService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Throwable;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Log;
 
-class KnowledgeBaseController extends Controller
+/**
+ * @group 5. База знаний (Knowledge Base)
+ *
+ * Управление справочными статьями и ответами на частые вопросы. Клиенты видят только опубликованные статьи (`is_published = true`), сотрудники поддержки и администраторы могут создавать, редактировать и удалять статьи.
+ */
+class KnowledgeBaseArticleController extends Controller
 {
-    private function defaultArticles(): array
+    public function __construct(private readonly KnowledgeBaseArticleService $articles)
     {
-        return [
-            [
-                'id' => 1,
-                'title' => 'Как сбросить пароль от учётной записи',
-                'slug' => 'kak-sbrosit-parol',
-                'content' => "Для восстановления доступа перейдите на страницу входа и нажмите «Забыли пароль?». Введите ваш рабочий email, на который будет отправлена ссылка для сброса пароля. Если письмо не пришло в течение 5 минут, проверьте папку «Спам» или обратитесь к администратору.",
-                'is_published' => true,
-                'created_at' => '2026-10-01T10:00:00.000000Z',
-                'updated_at' => '2026-10-01T10:00:00.000000Z',
-            ],
-            [
-                'id' => 2,
-                'title' => 'Инструкция по настройке корпоративного VPN',
-                'slug' => 'nastroyka-vpn',
-                'content' => "Для подключения к внутренней сети компании используйте клиент WireGuard или OpenVPN. Скачайте конфигурационный файл из личного кабинета сотрудника, импортируйте его в приложение и нажмите «Подключиться». При ошибке авторизации проверьте код двухфакторной аутентификации.",
-                'is_published' => true,
-                'created_at' => '2026-10-02T11:00:00.000000Z',
-                'updated_at' => '2026-10-02T11:00:00.000000Z',
-            ],
-            [
-                'id' => 3,
-                'title' => 'Смена адреса электронной почты (Email)',
-                'slug' => 'smena-email',
-                'content' => "Смена основного email-адреса аккаунта производится через обращение в службу поддержки. Укажите старый и новый адрес электронной почты. После проверки специалист обновит данные учетной записи и отправит письмо для подтверждения.",
-                'is_published' => true,
-                'created_at' => '2026-10-03T12:00:00.000000Z',
-                'updated_at' => '2026-10-03T12:00:00.000000Z',
-            ],
-            [
-                'id' => 4,
-                'title' => 'Проблемы с печатью на сетевом принтере',
-                'slug' => 'problemy-s-printerom',
-                'content' => "Если сетевой принтер не печатает:\n1) Проверьте питание и сетевой кабель.\n2) Перезапустите службу «Диспетчер печати» (Print Spooler).\n3) Очистите очередь печати от зависших документов.\n4) Проверьте наличие бумаги и уровень тонера.",
-                'is_published' => true,
-                'created_at' => '2026-10-04T13:00:00.000000Z',
-                'updated_at' => '2026-10-04T13:00:00.000000Z',
-            ],
-            [
-                'id' => 5,
-                'title' => 'Регламент работы службы технической поддержки',
-                'slug' => 'reglament-podderzhki',
-                'content' => "Сроки реакции по приоритетам:\n- Срочный (Urgent): реакция до 30 минут, решение до 2 часов.\n- Высокий (High): реакция до 1 часа, решение до 4 часов.\n- Средний (Medium): реакция до 2 часов, решение до 8 часов.\n- Низкий (Low): решение до 24 часов.",
-                'is_published' => true,
-                'created_at' => '2026-10-05T14:00:00.000000Z',
-                'updated_at' => '2026-10-05T14:00:00.000000Z',
-            ],
-        ];
     }
 
-    private function ensureArticlesSeeded(): void
+    /**
+     * Список статей базы знаний
+     *
+     * Возвращает список статей с пагинацией, поиском по тексту и фильтрацией по категории.
+     * Для клиентов и неавторизованных запросов возвращаются только опубликованные статьи.
+     *
+     * **Требуемая роль:** Публично / Любой авторизованный пользователь.
+     *
+     * @queryParam search string Поиск по заголовку и содержимому статьи. Example: пароль
+     * @queryParam category_id integer Фильтр по ID категории. Example: 1
+     * @queryParam is_published boolean Фильтр по публикации (только для `support` и `admin`). Example: true
+     * @queryParam per_page integer Количество записей на странице (1–100). Example: 15
+     */
+    public function index(Request $request): AnonymousResourceCollection
     {
-        try {
-            if (KnowledgeBaseArticle::count() === 0) {
-                foreach ($this->defaultArticles() as $item) {
-                    KnowledgeBaseArticle::create([
-                        'title' => $item['title'],
-                        'content' => $item['content'],
-                        'is_published' => true,
-                    ]);
-                }
-            }
-        } catch (Throwable) {
-            // Игнорируем, если структура таблицы отличается
+        $filters = $request->only(['search', 'category_id', 'is_published', 'per_page']);
+
+        // Клиент или гость видит только опубликованные статьи
+        if (! $request->user()?->isStaff()) {
+            $filters['is_published'] = true;
         }
+
+        return KnowledgeBaseArticleResource::collection($this->articles->paginate($filters));
     }
 
-    public function index(Request $request): JsonResponse
+    /**
+     * Создание статьи базы знаний
+     *
+     * **Требуемая роль:** `support`, `admin`.
+     *
+     * @authenticated
+     * @bodyParam title string required Заголовок статьи (до 255 символов). Example: Как настроить двухфакторную аутентификацию
+     * @bodyParam content string required Текст статьи. Example: Перейдите в настройки безопасности профиля...
+     * @bodyParam category_id integer ID категории. Example: 1
+     * @bodyParam is_published boolean Признак публикации. Example: true
+     */
+    public function store(StoreKnowledgeBaseArticleRequest $request): JsonResponse
     {
-        $this->ensureArticlesSeeded();
+        $authorId = $request->user()?->id ?? User::where('role', 'admin')->first()?->id ?? 1;
+        $article = $this->articles->create($request->validated() + ['user_id' => $authorId]);
 
-        $search = mb_strtolower(trim((string) ($request->input('search') ?? $request->input('q') ?? '')));
+        Log::info('Создана статья базы знаний', [
+            'article_id' => $article->id,
+            'title' => $article->title,
+            'user_id' => $authorId,
+        ]);
 
-        try {
-            $query = KnowledgeBaseArticle::query()->where('is_published', true);
-            if ($search !== '') {
-                $query->where(function ($q) use ($search) {
-                    $q->where('title', 'like', "%{$search}%")
-                      ->orWhere('content', 'like', "%{$search}%");
-                });
-            }
-            $dbArticles = $query->latest('id')->get();
-            if ($dbArticles->isNotEmpty()) {
-                return response()->json(['data' => $dbArticles]);
-            }
-        } catch (Throwable) {
-        }
-
-        $articles = $this->defaultArticles();
-        if ($search !== '') {
-            $articles = array_values(array_filter($articles, function ($a) use ($search) {
-                return str_contains(mb_strtolower($a['title']), $search)
-                    || str_contains(mb_strtolower($a['content']), $search);
-            }));
-        }
-
-        return response()->json(['data' => $articles]);
+        return (new KnowledgeBaseArticleResource($article))
+            ->response()
+            ->setStatusCode(Response::HTTP_CREATED);
     }
 
-    public function show($id): JsonResponse
+    /**
+     * Просмотр статьи базы знаний
+     *
+     * Неопубликованные статьи доступны только сотрудникам (`support`, `admin`), для остальных возвращается `404`.
+     *
+     * **Требуемая роль:** Публично / Любой авторизованный пользователь.
+     *
+     * @urlParam article integer required ID статьи. Example: 1
+     */
+    public function show(Request $request, KnowledgeBaseArticle $article): KnowledgeBaseArticleResource
     {
-        $this->ensureArticlesSeeded();
-
-        try {
-            $article = KnowledgeBaseArticle::find($id);
-            if ($article) {
-                return response()->json(['data' => $article]);
-            }
-        } catch (Throwable) {
+        if (! $article->is_published && ! $request->user()?->isStaff()) {
+            abort(404);
         }
 
-        foreach ($this->defaultArticles() as $article) {
-            if ((int) $article['id'] === (int) $id) {
-                return response()->json(['data' => $article]);
-            }
-        }
+        return new KnowledgeBaseArticleResource($this->articles->load($article));
+    }
 
-        return response()->json(['message' => 'Статья не найдена'], 404);
+    /**
+     * Обновление статьи базы знаний
+     *
+     * **Требуемая роль:** `support`, `admin`.
+     *
+     * @authenticated
+     * @urlParam article integer required ID статьи. Example: 1
+     * @bodyParam title string Заголовок статьи.
+     * @bodyParam content string Текст статьи.
+     * @bodyParam is_published boolean Статус публикации.
+     */
+    public function update(UpdateKnowledgeBaseArticleRequest $request, KnowledgeBaseArticle $article): KnowledgeBaseArticleResource
+    {
+        $updated = $this->articles->update($article, $request->validated());
+
+        Log::info('Обновлена статья базы знаний', ['article_id' => $article->id]);
+
+        return new KnowledgeBaseArticleResource($updated);
+    }
+
+    /**
+     * Удаление статьи базы знаний
+     *
+     * **Требуемая роль:** `support`, `admin`.
+     *
+     * @authenticated
+     * @urlParam article integer required ID статьи. Example: 1
+     */
+    public function destroy(KnowledgeBaseArticle $article): Response
+    {
+        $id = $article->id;
+        $this->articles->delete($article);
+
+        Log::info('Удалена статья базы знаний', ['article_id' => $id]);
+
+        return response()->noContent();
     }
 }

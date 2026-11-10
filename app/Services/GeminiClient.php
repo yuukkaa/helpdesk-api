@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class GeminiClient
@@ -25,7 +24,7 @@ class GeminiClient
 
         try {
             $response = Http::withoutVerifying()
-                ->timeout(5)
+                ->timeout(4)
                 ->withHeaders(['Content-Type' => 'application/json'])
                 ->post("{$this->baseUrl}?key={$this->apiKey}", [
                     'system_instruction' => [
@@ -43,8 +42,7 @@ class GeminiClient
                     ],
                 ]);
 
-            if ($response->failed()) {
-                Log::warning('Gemini API JSON Error: ' . $response->status());
+            if (!$response->successful()) {
                 return [];
             }
 
@@ -52,8 +50,7 @@ class GeminiClient
             $text = $data['candidates'][0]['content']['parts'][0]['text'] ?? '{}';
 
             return json_decode($text, true) ?: [];
-        } catch (Throwable $e) {
-            Log::error('Gemini JSON Exception: ' . $e->getMessage());
+        } catch (Throwable) {
             return [];
         }
     }
@@ -66,7 +63,7 @@ class GeminiClient
 
         try {
             $response = Http::withoutVerifying()
-                ->timeout(6)
+                ->timeout(4)
                 ->withHeaders(['Content-Type' => 'application/json'])
                 ->post("{$this->baseUrl}?key={$this->apiKey}", [
                     'system_instruction' => [
@@ -83,15 +80,13 @@ class GeminiClient
                     ],
                 ]);
 
-            if ($response->failed()) {
-                Log::warning('Gemini API Text Error: ' . $response->status());
+            if (!$response->successful()) {
                 return '';
             }
 
             $data = $response->json();
             return trim($data['candidates'][0]['content']['parts'][0]['text'] ?? '');
-        } catch (Throwable $e) {
-            Log::error('Gemini Text Exception: ' . $e->getMessage());
+        } catch (Throwable) {
             return '';
         }
     }

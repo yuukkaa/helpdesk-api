@@ -1,0 +1,19 @@
+info:
+  name: Закрыть
+  type: http
+  seq: 9
+
+http:
+  method: PATCH
+  url: "{{base_url}}/tickets/8/status"
+  body:
+    type: json
+    data: '{"status":"closed"}'
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

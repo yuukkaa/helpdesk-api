@@ -1,0 +1,26 @@
+info:
+  name: Период
+  type: http
+  seq: 8
+
+http:
+  method: GET
+  url: "{{base_url}}/tickets?date_from=2026-10-01&date_to=2026-12-31"
+  params:
+    - name: date_from
+      value: 2026-10-01
+      type: query
+    - name: date_to
+      value: 2026-12-31
+      type: query
+  body:
+    type: json
+    data: ""
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

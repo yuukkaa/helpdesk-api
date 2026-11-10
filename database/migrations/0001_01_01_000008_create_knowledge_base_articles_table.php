@@ -9,26 +9,28 @@ return new class extends Migration
     /**
      * Run the migrations.
      */
-   public function up(): void
-{
-    Schema::create('knowledge_base_articles', function (Blueprint $table) {
-        $table->id();
-        $table->foreignId('user_id')->constrained('users')->restrictOnDelete();
-        $table->foreignId('category_id')->nullable()->constrained('categories')->nullOnDelete();
-        $table->string('title');
-        $table->text('content');
-        $table->boolean('is_published')->default(false);
-        $table->timestamps();
+    public function up(): void
+    {
+        Schema::create('knowledge_base_articles', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained('users')->restrictOnDelete();
+            $table->foreignId('category_id')->nullable()->constrained('categories')->nullOnDelete();
+            $table->string('title');
+            $table->text('content');
+            $table->boolean('is_published')->default(false);
+            $table->timestamps();
 
-        $table->fullText(['title', 'content']);
-    });
-}
+            if (in_array(Schema::getConnection()->getDriverName(), ['mysql', 'mariadb', 'pgsql'], true)) {
+                $table->fullText(['title', 'content']);
+            }
+        });
+    }
 
     /**
      * Reverse the migrations.
      */
-   public function down(): void
-{
-    Schema::dropIfExists('knowledge_base_articles');
-}
+    public function down(): void
+    {
+        Schema::dropIfExists('knowledge_base_articles');
+    }
 };

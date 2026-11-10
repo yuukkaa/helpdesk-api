@@ -26,6 +26,16 @@ class User extends Authenticatable
         ];
     }
 
+    public function isAdmin(): bool
+    {
+        return $this->role === UserRole::Admin;
+    }
+
+    public function isStaff(): bool
+    {
+        return in_array($this->role, [UserRole::Support, UserRole::Admin], true);
+    }
+
     public function tickets(): HasMany
     {
         return $this->hasMany(Ticket::class, 'user_id');

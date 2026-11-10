@@ -1,5 +1,8 @@
 <?php
 
+use App\Exceptions\BusinessException;
+use App\Http\Middleware\EnsureUserHasRole;
+use App\Http\Middleware\LogApiRequests;
 use App\Models\{Category, KnowledgeBaseArticle, Message, Tag, Ticket, User};
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -8,6 +11,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -20,10 +24,20 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        $middleware->alias([
+            'role' => EnsureUserHasRole::class,
+        ]);
+
+        // Запись каждого запроса к API (метод, URL, id пользователя, код ответа, время выполнения)
+        $middleware->api(append: [
+            LogApiRequests::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        // Все запросы к /api/* получают JSON
+        $exceptions->dontReport([
+            BusinessException::class,
+        ]);
+
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request, Throwable $e) => $request->is('api/*') || $request->expectsJson()
         );
@@ -40,13 +54,29 @@ return Application::configure(basePath: dirname(__DIR__))
             ], 422);
         });
 
-        // 401: нет авторизации (понадобится в ПР8)
+        // 401: нет токена или токен недействителен
         $exceptions->render(function (AuthenticationException $e, Request $request) {
             if (! $request->is('api/*')) {
                 return null;
             }
 
             return response()->json(['message' => 'Требуется авторизация.'], 401);
+        });
+
+        // 409 или 422: нарушение бизнес-правила
+        $exceptions->render(function (BusinessException $e, Request $request) {
+            if (! $request->is('api/*')) {
+                return null;
+            }
+
+            Log::warning('Нарушение бизнес-правила', [
+                'message' => $e->getMessage(),
+                'status' => $e->status(),
+                'user_id' => $request->user()?->id,
+                'url' => $request->fullUrl(),
+            ]);
+
+            return response()->json(['message' => $e->getMessage()], $e->status());
         });
 
         // 404: запись или маршрут не найден
@@ -95,7 +125,7 @@ return Application::configure(basePath: dirname(__DIR__))
             };
         });
 
-        // Все остальные ошибки: 403, 405, 409, 429, 500 и т. д.
+        // Остальные ошибки: 403, 405, 429, 500 и т. д. (без стека и SQL)
         $exceptions->render(function (Throwable $e, Request $request) {
             if (! $request->is('api/*')) {
                 return null;
@@ -103,7 +133,15 @@ return Application::configure(basePath: dirname(__DIR__))
 
             $status = $e instanceof HttpExceptionInterface ? $e->getStatusCode() : 500;
 
-            // При APP_DEBUG=true оставляем подробный вывод для отладки
+            if ($status >= 500) {
+                Log::error('Внутренняя ошибка API', [
+                    'exception' => get_class($e),
+                    'message' => $e->getMessage(),
+                    'user_id' => $request->user()?->id,
+                    'url' => $request->fullUrl(),
+                ]);
+            }
+
             if ($status >= 500 && config('app.debug')) {
                 return null;
             }

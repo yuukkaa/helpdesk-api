@@ -1,0 +1,23 @@
+info:
+  name: Поиск
+  type: http
+  seq: 11
+
+http:
+  method: GET
+  url: "{{base_url}}/tickets?search=пароль"
+  params:
+    - name: search
+      value: пароль
+      type: query
+  body:
+    type: json
+    data: ""
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

@@ -14,7 +14,6 @@ class StoreKnowledgeBaseArticleRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'user_id' => ['required', 'integer', 'exists:users,id'],
             'title' => ['required', 'string', 'max:255'],
             'content' => ['required', 'string'],
             'category_id' => ['nullable', 'integer', 'exists:categories,id'],
@@ -25,8 +24,6 @@ class StoreKnowledgeBaseArticleRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'user_id.required' => 'Укажите автора статьи.',
-            'user_id.exists' => 'Указанный пользователь не существует.',
             'title.required' => 'Укажите заголовок статьи.',
             'title.max' => 'Заголовок не должен быть длиннее 255 символов.',
             'content.required' => 'Введите текст статьи.',

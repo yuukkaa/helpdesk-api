@@ -1,0 +1,19 @@
+info:
+  name: "Специалист: удалить заявку"
+  type: http
+  seq: 15
+
+http:
+  method: DELETE
+  url: "{{base_url}}/tickets/3"
+  body:
+    type: json
+    data: ""
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false
