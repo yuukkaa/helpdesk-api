@@ -75,7 +75,23 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
             : JSON.stringify(options.body),
     })
   } catch {
-    throw new ApiError('Ошибка сети: не удалось подключиться к серверу API.', 0)
+    // Резервная попытка через 127.0.0.1:8000 / прокси Vite (на случай резолвинга localhost в IPv6 ::1)
+    try {
+      const fallbackUrl = new URL(`/api${cleanPath}`, window.location.origin)
+      url.searchParams.forEach((v, k) => fallbackUrl.searchParams.set(k, v))
+      response = await fetch(fallbackUrl.toString(), {
+        method: options.method ?? 'GET',
+        headers,
+        body:
+          options.body === undefined
+            ? undefined
+            : isFormData
+              ? (options.body as FormData)
+              : JSON.stringify(options.body),
+      })
+    } catch {
+      throw new ApiError('Ошибка сети: не удалось подключиться к серверу API.', 0)
+    }
   }
 
   if (response.status === 204) {
