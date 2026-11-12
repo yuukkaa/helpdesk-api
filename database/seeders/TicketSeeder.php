@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\Attachment;
 use App\Models\Category;
 use App\Models\Message;
 use App\Models\Tag;
@@ -10,6 +11,7 @@ use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -19,6 +21,7 @@ class TicketSeeder extends Seeder
     {
         Schema::disableForeignKeyConstraints();
         try {
+            Attachment::query()->delete();
             Message::query()->delete();
             DB::table('ticket_tag')->delete();
         } catch (Throwable) {}
@@ -36,6 +39,7 @@ class TicketSeeder extends Seeder
         $catAccess = Category::where('name', 'like', '%Доступ%')->first() ?? Category::first();
         $catFinance = Category::where('name', 'like', '%Оплат%')->first() ?? Category::first();
         $catTech = Category::where('name', 'like', '%Технич%')->first() ?? Category::first();
+        $catGeneral = Category::where('name', 'like', '%Общ%')->first() ?? Category::first();
 
         $tagAccount = Tag::where('name', 'like', '%аккаунт%')->first();
         $tagUrgent = Tag::where('name', 'like', '%срочн%')->first();
@@ -56,8 +60,8 @@ class TicketSeeder extends Seeder
                 'assignee_id' => $support1?->id ?? 1,
                 'tags' => array_filter([$tagAccount?->id, $tagUrgent?->id]),
                 'messages' => [
-                    ['author_id' => $client1?->id ?? 1, 'is_internal' => false, 'body' => 'Пробовал вводить пароль вручную и копировать — войти всё равно не удается.'],
-                    ['author_id' => $support1?->id ?? 1, 'is_internal' => true, 'body' => 'Учетная запись была заблокирована из-за 5 неудачных попыток ввода. Сняла блокировку.'],
+                    ['author_id' => $client1?->id ?? 1, 'is_internal' => false, 'body' => 'Пробовала вводить пароль вручную и копировать — войти всё равно не удается. Прикладываю скриншот ошибки.'],
+                    ['author_id' => $support1?->id ?? 1, 'is_internal' => true, 'body' => 'Учетная запись была заблокирована из-за 5 неудачных попыток ввода. Сняла блокировку в панели.'],
                     ['author_id' => $support1?->id ?? 1, 'is_internal' => false, 'body' => 'Здравствуйте! Мы разблокировали вашу учетную запись и выслали ссылку для смены пароля. Проверьте почту.'],
                 ],
             ],
@@ -105,7 +109,7 @@ class TicketSeeder extends Seeder
                 'client_id' => $client2?->id ?? 1,
                 'user_id' => $client2?->id ?? 1,
                 'assignee_id' => $support1?->id ?? 1,
-                'resolved_at' => now(),
+                'resolved_at' => now()->subHours(3),
                 'tags' => array_filter([$tagBug?->id]),
                 'messages' => [
                     ['author_id' => $client2?->id ?? 1, 'is_internal' => false, 'body' => 'Проверял в Chrome и Edge — ошибка повторяется.'],
@@ -120,13 +124,13 @@ class TicketSeeder extends Seeder
                 'status' => 'new',
                 'priority' => 'high',
                 'category_id' => $catFinance?->id ?? 1,
-                'author_id' => $client2?->id ?? 1,
-                'client_id' => $client2?->id ?? 1,
-                'user_id' => $client2?->id ?? 1,
-                'assignee_id' => $support2?->id ?? 1,
+                'author_id' => $client1?->id ?? 1,
+                'client_id' => $client1?->id ?? 1,
+                'user_id' => $client1?->id ?? 1,
+                'assignee_id' => null,
                 'tags' => array_filter([$tagBilling?->id]),
                 'messages' => [
-                    ['author_id' => $client2?->id ?? 1, 'is_internal' => false, 'body' => 'Номер сформированного счёта: INV-2026-1042.'],
+                    ['author_id' => $client1?->id ?? 1, 'is_internal' => false, 'body' => 'Номер сформированного счёта: INV-2026-1042.'],
                 ],
             ],
             [
@@ -146,10 +150,104 @@ class TicketSeeder extends Seeder
                     ['author_id' => $support1?->id ?? 1, 'is_internal' => false, 'body' => 'Здравствуйте! Мы оптимизировали формирование больших отчетов. Пожалуйста, проверьте выгрузку за квартал сейчас.'],
                 ],
             ],
+            [
+                'subject' => 'Настройка двухфакторной аутентификации для нового сотрудника',
+                'title' => 'Настройка двухфакторной аутентификации для нового сотрудника',
+                'description' => 'Подскажите, как сбросить привязку Google Authenticator при замене рабочего смартфона сотрудника.',
+                'status' => 'new',
+                'priority' => 'low',
+                'category_id' => $catAccess?->id ?? 1,
+                'author_id' => $client2?->id ?? 1,
+                'client_id' => $client2?->id ?? 1,
+                'user_id' => $client2?->id ?? 1,
+                'assignee_id' => null,
+                'tags' => array_filter([$tagAccount?->id]),
+                'messages' => [],
+            ],
+            [
+                'subject' => 'Запрос закрывающих документов (акт сверки за 3 квартал)',
+                'title' => 'Запрос закрывающих документов (акт сверки за 3 квартал)',
+                'description' => 'Добрый день! Просим направить подписанный акт сверки взаиморасчётов за 3 квартал в формате PDF с ЭЦП.',
+                'status' => 'closed',
+                'priority' => 'low',
+                'category_id' => $catFinance?->id ?? 1,
+                'author_id' => $client1?->id ?? 1,
+                'client_id' => $client1?->id ?? 1,
+                'user_id' => $client1?->id ?? 1,
+                'assignee_id' => $support2?->id ?? 1,
+                'resolved_at' => now()->subDays(2),
+                'tags' => array_filter([$tagBilling?->id]),
+                'messages' => [
+                    ['author_id' => $support2?->id ?? 1, 'is_internal' => false, 'body' => 'Акт сверки сформирован и загружен в раздел «Финансы -> Документы». Заявка закрыта.'],
+                ],
+            ],
+            [
+                'subject' => 'Сбой синхронизации справочника контрагентов по API',
+                'title' => 'Сбой синхронизации справочника контрагентов по API',
+                'description' => 'При отправке вебхука обновления карточки контрагента возвращается код 502 Bad Gateway.',
+                'status' => 'waiting_for_client',
+                'priority' => 'high',
+                'category_id' => $catTech?->id ?? 1,
+                'author_id' => $client2?->id ?? 1,
+                'client_id' => $client2?->id ?? 1,
+                'user_id' => $client2?->id ?? 1,
+                'assignee_id' => $support1?->id ?? 1,
+                'tags' => array_filter([$tagBug?->id]),
+                'messages' => [
+                    ['author_id' => $support1?->id ?? 1, 'is_internal' => false, 'body' => 'Уточните, пожалуйста, точное время последнего запроса и IP-адрес вашего сервера.'],
+                ],
+            ],
+            [
+                'subject' => 'Консультация по регламенту SLA для критических инцидентов',
+                'title' => 'Консультация по регламенту SLA для критических инцидентов',
+                'description' => 'Прошу уточнить нормативное время реакции на заявки со статусом «Срочный» в выходные и праздничные дни.',
+                'status' => 'resolved',
+                'priority' => 'low',
+                'category_id' => $catGeneral?->id ?? 1,
+                'author_id' => $client1?->id ?? 1,
+                'client_id' => $client1?->id ?? 1,
+                'user_id' => $client1?->id ?? 1,
+                'assignee_id' => $support2?->id ?? 1,
+                'resolved_at' => now()->subHours(10),
+                'tags' => [],
+                'messages' => [
+                    ['author_id' => $support2?->id ?? 1, 'is_internal' => false, 'body' => 'Для заявок с приоритетом «Срочный» время первичной реакции составляет 15 минут круглосуточно 24/7.'],
+                ],
+            ],
+            [
+                'subject' => 'Не отображаются новые уведомления в верхнем меню',
+                'title' => 'Не отображаются новые уведомления в верхнем меню',
+                'description' => 'Счётчик непрочитанных ответов не обновляется без перезагрузки вкладки браузера.',
+                'status' => 'new',
+                'priority' => 'medium',
+                'category_id' => $catTech?->id ?? 1,
+                'author_id' => $client1?->id ?? 1,
+                'client_id' => $client1?->id ?? 1,
+                'user_id' => $client1?->id ?? 1,
+                'assignee_id' => null,
+                'tags' => array_filter([$tagBug?->id]),
+                'messages' => [],
+            ],
+            [
+                'subject' => 'Добавление дополнительного пользователя от организации',
+                'title' => 'Добавление дополнительного пользователя от организации',
+                'description' => 'Необходимо подключить нового бухгалтера к порталу поддержки с правами клиента.',
+                'status' => 'new',
+                'priority' => 'medium',
+                'category_id' => $catGeneral?->id ?? 1,
+                'author_id' => $client2?->id ?? 1,
+                'client_id' => $client2?->id ?? 1,
+                'user_id' => $client2?->id ?? 1,
+                'assignee_id' => null,
+                'tags' => array_filter([$tagAccount?->id]),
+                'messages' => [],
+            ],
         ];
 
         $ticketCols = Schema::getColumnListing('tickets');
         $msgCols = Schema::getColumnListing('messages');
+
+        $firstTicket = null;
 
         foreach ($items as $data) {
             $messages = $data['messages'];
@@ -168,6 +266,9 @@ class TicketSeeder extends Seeder
             }
 
             $ticket = Ticket::create($filtered);
+            if ($firstTicket === null) {
+                $firstTicket = $ticket;
+            }
 
             if (!empty($tags)) {
                 try {
@@ -191,5 +292,53 @@ class TicketSeeder extends Seeder
                 } catch (Throwable) {}
             }
         }
+
+        // Создаём демонстрационный скриншот ошибки в хранилище public для первой заявки
+        if ($firstTicket) {
+            try {
+                $relativePath = 'attachments/demo-login-error.png';
+                $pngData = $this->generateDemoPng();
+                Storage::disk('public')->put($relativePath, $pngData);
+
+                Attachment::create([
+                    'ticket_id' => $firstTicket->id,
+                    'message_id' => null,
+                    'original_name' => 'screenshot-login-error.png',
+                    'path' => $relativePath,
+                    'mime_type' => 'image/png',
+                    'size' => strlen($pngData),
+                ]);
+            } catch (Throwable) {}
+        }
+    }
+
+    private function generateDemoPng(): string
+    {
+        if (function_exists('imagecreatetruecolor')) {
+            $im = imagecreatetruecolor(480, 180);
+            $bg = imagecolorallocate($im, 254, 242, 242);
+            $border = imagecolorallocate($im, 239, 68, 68);
+            $textDark = imagecolorallocate($im, 153, 27, 27);
+            $textMuted = imagecolorallocate($im, 185, 28, 28);
+
+            imagefilledrectangle($im, 0, 0, 479, 179, $bg);
+            imagerectangle($im, 4, 4, 475, 175, $border);
+            imagestring($im, 5, 24, 35, 'AUTH ERROR 401: Invalid credentials', $textDark);
+            imagestring($im, 4, 24, 70, 'Account: zhanna@client.local', $textMuted);
+            imagestring($im, 3, 24, 105, 'Status: Temporarily locked after 5 failed attempts', $textMuted);
+            imagestring($im, 2, 24, 140, 'Help Desk Screenshot Attachment (Storage/public)', $textMuted);
+
+            ob_start();
+            imagepng($im);
+            $bytes = (string) ob_get_clean();
+            imagedestroy($im);
+            if ($bytes !== '') {
+                return $bytes;
+            }
+        }
+
+        return base64_decode(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+        );
     }
 }

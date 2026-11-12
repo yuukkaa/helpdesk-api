@@ -29,10 +29,11 @@ interface Options {
 
 /**
  * Общая функция отправки запросов к Laravel API:
- * - добавляет заголовки Accept: application/json, Content-Type: application/json и Authorization: Bearer <token>;
+ * - добавляет заголовки Accept: application/json, Content-Type: application/json (кроме FormData) и Authorization: Bearer <token>;
+ * - для FormData заголовок Content-Type не устанавливается вручную (браузер сам добавляет multipart/form-data с boundary);
  * - при ответе 401 удаляет токен и перенаправляет на страницу входа;
  * - при ответе 422 возвращает объект errors (в ApiError.errors) для вывода в форме;
- * - обрабатывает ошибки сети (0) и ошибки сервера (500+).
+ * - обрабатывает ошибки бизнес-правил (409), доступа (403), сети (0) и сервера (500+).
  */
 export async function api<T>(path: string, options: Options = {}): Promise<T> {
   const baseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL
@@ -46,10 +47,15 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
   })
 
   const token = getToken()
+  const isFormData = options.body instanceof FormData
 
   const headers: Record<string, string> = {
     Accept: 'application/json',
-    'Content-Type': 'application/json',
+  }
+
+  // При отправке FormData заголовок Content-Type: application/json НЕ указывается
+  if (!isFormData) {
+    headers['Content-Type'] = 'application/json'
   }
 
   if (token) {
@@ -61,7 +67,12 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
     response = await fetch(url.toString(), {
       method: options.method ?? 'GET',
       headers,
-      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      body:
+        options.body === undefined
+          ? undefined
+          : isFormData
+            ? (options.body as FormData)
+            : JSON.stringify(options.body),
     })
   } catch {
     throw new ApiError('Ошибка сети: не удалось подключиться к серверу API.', 0)
@@ -104,6 +115,50 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
   }
 
   return data as T
+}
+
+/** Формирует полный URL для отображения/скачивания вложения из хранилища Laravel Storage. */
+export function getAttachmentUrl(att: { url?: string | null; path?: string }): string {
+  if (att.url) return att.url
+  const origin = API_BASE_URL.replace(/\/api\/?$/, '')
+  const cleanPath = (att.path ?? '').replace(/^\/+/, '')
+  return `${origin}/storage/${cleanPath}`
+}
+
+/** Скачивание CSV-отчёта по заявкам с передачей Bearer-токена. */
+export async function downloadTicketsCsv(
+  query: Record<string, string | number | undefined> = {}
+): Promise<void> {
+  const baseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL
+  const url = new URL(`${baseUrl}/tickets/export/csv`, window.location.origin)
+
+  Object.entries(query).forEach(([key, value]) => {
+    if (value !== undefined && value !== '') {
+      url.searchParams.set(key, String(value))
+    }
+  })
+
+  const token = getToken()
+  const headers: Record<string, string> = {}
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+
+  const response = await fetch(url.toString(), { headers })
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}))
+    throw new ApiError(data.message ?? 'Не удалось скачать CSV-отчёт.', response.status)
+  }
+
+  const blob = await response.blob()
+  const objectUrl = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = objectUrl
+  link.download = 'tickets_export.csv'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(objectUrl)
 }
 
 /** Текст ошибки для пользователя: первая ошибка валидации или общее сообщение. */

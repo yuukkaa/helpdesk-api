@@ -24,6 +24,8 @@ export interface Tag {
 export interface Attachment {
   id: number
   original_name: string
+  path?: string
+  url?: string | null
   mime_type: string
   size: number
 }
@@ -44,6 +46,8 @@ export interface Ticket {
   description: string
   status: TicketStatus
   priority: TicketPriority
+  category_id?: number
+  messages_count?: number
   resolved_at: string | null
   created_at: string
   updated_at: string
@@ -53,6 +57,22 @@ export interface Ticket {
   messages?: Message[]
   attachments?: Attachment[]
   tags?: Tag[]
+}
+
+export interface TicketStatistics {
+  total_tickets: number
+  by_status: Record<string, number>
+  by_priority: Record<string, number>
+  avg_resolution_minutes: number | null
+  by_category: { id: number; name: string; tickets_count: number }[]
+  workload: {
+    id: number
+    name: string
+    email: string
+    role: Role
+    active_tickets: number
+    resolved_tickets: number
+  }[]
 }
 
 export interface Article {

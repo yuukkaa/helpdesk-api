@@ -12,14 +12,16 @@ class AttachmentResource extends JsonResource
      *
      * @return array<string, mixed>
      */
-public function toArray(Request $request): array
-{
-    return [
-        'id' => $this->id,
-        'original_name' => $this->original_name,
-        'mime_type' => $this->mime_type,
-        'size' => $this->size,
-        'created_at' => $this->created_at,
-    ];
-}
+    public function toArray(Request $request): array
+    {
+        return [
+            'id' => $this->id,
+            'original_name' => $this->original_name,
+            'path' => $this->path,
+            'url' => $this->path ? url('storage/' . ltrim($this->path, '/')) : null,
+            'mime_type' => $this->mime_type,
+            'size' => $this->size,
+            'created_at' => $this->created_at,
+        ];
+    }
 }

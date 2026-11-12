@@ -56,21 +56,31 @@ export default function LoginPage() {
     }
   }
 
+  function fillDemoAccount(demoEmail: string) {
+    setMode('login')
+    setEmail(demoEmail)
+    setPassword('password')
+    setServerMessage(null)
+    setFieldErrors({})
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-sm">
+      <Card className="w-full max-w-md">
         <CardHeader>
           <div className="mb-2 flex items-center gap-2 font-semibold">
             <LifeBuoy className="size-5" />
             Help Desk
           </div>
-          <CardTitle>{mode === 'login' ? 'Вход' : 'Регистрация'}</CardTitle>
+          <CardTitle>{mode === 'login' ? 'Вход в систему' : 'Регистрация клиента'}</CardTitle>
           <CardDescription>
-            {mode === 'login' ? 'Введите email и пароль' : 'Создайте учётную запись клиента'}
+            {mode === 'login'
+              ? 'Введите email и пароль учётной записи'
+              : 'Создайте новую учётную запись с ролью «клиент»'}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={submit} className="space-y-4">
+          <form onSubmit={submit} noValidate className="space-y-4">
             {serverMessage && (
               <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
                 {serverMessage}
@@ -79,8 +89,13 @@ export default function LoginPage() {
 
             {mode === 'register' && (
               <div className="space-y-1.5">
-                <Label htmlFor="name">Имя</Label>
-                <Input id="name" value={name} onChange={(e) => setName(e.target.value)} />
+                <Label htmlFor="name">Имя *</Label>
+                <Input
+                  id="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Иван Иванов"
+                />
                 {fieldErrors.name?.[0] && (
                   <p className="text-xs text-destructive">{fieldErrors.name[0]}</p>
                 )}
@@ -88,20 +103,27 @@ export default function LoginPage() {
             )}
 
             <div className="space-y-1.5">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <Label htmlFor="email">Email *</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="user@helpdesk.local"
+              />
               {fieldErrors.email?.[0] && (
                 <p className="text-xs text-destructive">{fieldErrors.email[0]}</p>
               )}
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="password">Пароль</Label>
+              <Label htmlFor="password">Пароль *</Label>
               <Input
                 id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                placeholder="Не менее 8 символов"
               />
               {fieldErrors.password?.[0] && (
                 <p className="text-xs text-destructive">{fieldErrors.password[0]}</p>
@@ -110,7 +132,7 @@ export default function LoginPage() {
 
             {mode === 'register' && (
               <div className="space-y-1.5">
-                <Label htmlFor="confirmation">Повторите пароль</Label>
+                <Label htmlFor="confirmation">Повторите пароль *</Label>
                 <Input
                   id="confirmation"
                   type="password"
@@ -134,10 +156,40 @@ export default function LoginPage() {
             </Button>
 
             {mode === 'login' && (
-              <p className="text-xs text-muted-foreground">
-                Тестовые учётные записи (пароль password): admin@helpdesk.local, aigerim@helpdesk.local,
-                zhanna@client.local
-              </p>
+              <div className="space-y-2 border-t pt-3">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Быстрый выбор тестовой роли (пароль: password):
+                </p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => fillDemoAccount('zhanna@client.local')}
+                  >
+                    Клиент
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => fillDemoAccount('aigerim@helpdesk.local')}
+                  >
+                    Специалист
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => fillDemoAccount('admin@helpdesk.local')}
+                  >
+                    Админ
+                  </Button>
+                </div>
+              </div>
             )}
           </form>
         </CardContent>

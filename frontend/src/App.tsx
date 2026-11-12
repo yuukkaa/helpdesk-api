@@ -1,6 +1,7 @@
-import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from '@/components/layout'
 import { UserProvider, useCurrentUser } from '@/lib/user-context'
+import AdminPage from '@/pages/admin-page'
 import KnowledgeBasePage from '@/pages/knowledge-base-page'
 import LoginPage from '@/pages/login-page'
 import TicketPage from '@/pages/ticket-page'
@@ -18,6 +19,8 @@ function AppRoutes() {
         <Route index element={<TicketsPage />} />
         <Route path="tickets/:id" element={<TicketPage />} />
         <Route path="knowledge-base" element={<KnowledgeBasePage />} />
+        <Route path="admin" element={<AdminPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
   )

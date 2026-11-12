@@ -1,18 +1,25 @@
 import { LifeBuoy } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Toaster } from '@/components/ui/sonner'
 import { roleLabels } from '@/lib/labels'
 import { cn } from '@/lib/utils'
 import { useCurrentUser } from '@/lib/user-context'
 
-const links = [
-  { to: '/', label: 'Заявки', end: true },
-  { to: '/knowledge-base', label: 'База знаний', end: false },
-]
-
 export function Layout() {
-  const { current, logout } = useCurrentUser()
+  const { current, isStaff, isAdmin, logout } = useCurrentUser()
+
+  const links = [
+    { to: '/', label: 'Заявки', end: true, visible: true },
+    { to: '/knowledge-base', label: 'База знаний', end: false, visible: true },
+    {
+      to: '/admin',
+      label: isAdmin ? 'Администрирование' : 'Аналитика и теги',
+      end: false,
+      visible: isStaff,
+    },
+  ].filter((link) => link.visible)
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -32,7 +39,7 @@ export function Layout() {
                 className={({ isActive }) =>
                   cn(
                     'rounded-md px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent',
-                    isActive ? 'bg-accent text-accent-foreground' : 'text-muted-foreground',
+                    isActive ? 'bg-accent text-accent-foreground' : 'text-muted-foreground'
                   )
                 }
               >
@@ -43,9 +50,12 @@ export function Layout() {
 
           <div className="ml-auto flex items-center gap-3">
             {current && (
-              <span className="text-sm">
-                {current.name} <span className="text-muted-foreground">({roleLabels[current.role]})</span>
-              </span>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="font-medium">{current.name}</span>
+                <Badge variant="outline" className="text-xs">
+                  {roleLabels[current.role]}
+                </Badge>
+              </div>
             )}
             <Button variant="outline" size="sm" onClick={logout}>
               Выйти
