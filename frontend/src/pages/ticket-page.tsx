@@ -691,9 +691,9 @@ export function TicketPage() {
                 <div className="space-y-2">
                   <Label>1. Назначение исполнителя</Label>
                   {isAdmin ? (
-                    <div className="flex gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
                       <Select value={assigneeId} onValueChange={setAssigneeId}>
-                        <SelectTrigger className="flex-1">
+                        <SelectTrigger className="min-w-0 flex-1">
                           <SelectValue placeholder="Выберите пользователя" />
                         </SelectTrigger>
                         <SelectContent>
@@ -706,6 +706,7 @@ export function TicketPage() {
                       </Select>
                       <Button
                         variant="secondary"
+                        className="shrink-0"
                         disabled={!assigneeId || updating}
                         onClick={() =>
                           run(
@@ -770,12 +771,12 @@ export function TicketPage() {
                   <Label className="text-xs text-muted-foreground">
                     Проверка бизнес-правил перехода статуса (409 Conflict)
                   </Label>
-                  <div className="flex gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
                     <Select
                       value={customStatus}
                       onValueChange={(v) => setCustomStatus(v as TicketStatus)}
                     >
-                      <SelectTrigger className="flex-1">
+                      <SelectTrigger className="min-w-0 flex-1">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -789,6 +790,7 @@ export function TicketPage() {
                     <Button
                       variant="outline"
                       size="sm"
+                      className="shrink-0"
                       disabled={updating}
                       onClick={() => handleChangeStatus(customStatus)}
                     >
@@ -800,9 +802,9 @@ export function TicketPage() {
                 {/* 4. Управление метками */}
                 <div className="space-y-2 border-t pt-3">
                   <Label>3. Добавить метку (тег)</Label>
-                  <div className="flex gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
                     <Select value={selectedTag} onValueChange={setSelectedTag}>
-                      <SelectTrigger className="w-full">
+                      <SelectTrigger className="min-w-0 flex-1">
                         <SelectValue placeholder="Выберите метку" />
                       </SelectTrigger>
                       <SelectContent>
@@ -813,7 +815,13 @@ export function TicketPage() {
                         ))}
                       </SelectContent>
                     </Select>
-                    <Button variant="outline" size="sm" onClick={handleAddTag} disabled={updating}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0"
+                      onClick={handleAddTag}
+                      disabled={updating}
+                    >
                       Добавить
                     </Button>
                   </div>
